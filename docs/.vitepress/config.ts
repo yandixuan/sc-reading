@@ -61,8 +61,19 @@ function sidebarSpring() {
       text: 'boot',
       collapsible: true,
       items: [
+        { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
+        { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
+        { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },
         { text: 'SpringApplication', link: '/spring/boot/SpringApplication' },
         { text: 'SpringFactoriesLoader', link: '/spring/boot/SpringFactoriesLoader' },
+      ],
+    },
+    {
+      text: 'core',
+      collapsible: true,
+      items: [
+        { text: 'MutablePropertySources', link: '/spring/core/MutablePropertySources' },
+        { text: 'PropertySource', link: '/spring/core/PropertySource' },
       ],
     },
   ]

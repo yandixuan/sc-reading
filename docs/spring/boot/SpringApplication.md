@@ -1,5 +1,12 @@
 # SpringApplication
 
+## 属性
+
+```java
+// 生产ApplicationContext的工厂
+private ApplicationContextFactory applicationContextFactory = ApplicationContextFactory.DEFAULT;
+```
+
 ## 方法
 
 ### run
@@ -17,24 +24,37 @@ public ConfigurableApplicationContext run(String... args)  {
   ConfigurableApplicationContext context = null;
   // java headless
   configureHeadlessProperty();
-  // 获取
+  // 获取 SpringApplicationRunListeners 收集 SpringApplicationRunListener 集合
   SpringApplicationRunListeners listeners = getRunListeners(args);
+  // SpringBoot准备开始启动，发布staring事件
+  // 可以SPI添加SpringApplicationRunListener实现类
   listeners.starting(bootstrapContext, this.mainApplicationClass);
   try {
+   // 将main方法的参数 封装成 ApplicationArguments
    ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+   // 准备环境
    ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
    configureIgnoreBeanInfo(environment);
+   // 打印banner
    Banner printedBanner = printBanner(environment);
+   // 创建applicationContext
    context = createApplicationContext();
+   // 设置 度量标准以诊断启动缓慢
    context.setApplicationStartup(this.applicationStartup);
+   // 准备上下文
    prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner);
+   // 刷新上下文
    refreshContext(context);
+   // 空实现
    afterRefresh(context, applicationArguments);
+   // 记录结束时间
    Duration timeTakenToStartup = Duration.ofNanos(System.nanoTime() - startTime);
    if (this.logStartupInfo) {
     new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), timeTakenToStartup);
    }
+   // 触发started事件
    listeners.started(context, timeTakenToStartup);
+   // 循环调用 实现了2类ApplicationRunner、CommandLineRunner接口的bean的 run方法
    callRunners(context, applicationArguments);
   }
   catch (Throwable ex) {
@@ -43,6 +63,8 @@ public ConfigurableApplicationContext run(String... args)  {
   }
   try {
    Duration timeTakenToReady = Duration.ofNanos(System.nanoTime() - startTime);
+   // 触发ready事件
+   // 打印Spring容器启动耗时
    listeners.ready(context, timeTakenToReady);
   }
   catch (Throwable ex) {
@@ -112,4 +134,228 @@ private <T> List<T> createSpringFactoriesInstances(Class<T> type, Class<?>[] par
   }
   return instances;
  }
+```
+
+### prepareEnvironment
+
+准备Spring应用环境
+
+```java
+private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
+   DefaultBootstrapContext bootstrapContext, ApplicationArguments applicationArguments) {
+  // Create and configure the environment
+  // 创建环境
+  ConfigurableEnvironment environment = getOrCreateEnvironment();
+  // 注入commonLine配置源，并提高有限级到最高。
+  configureEnvironment(environment, applicationArguments.getSourceArgs());
+  ConfigurationPropertySources.attach(environment);
+  // 发布environmentPrepared事件
+  listeners.environmentPrepared(bootstrapContext, environment);
+  DefaultPropertiesPropertySource.moveToEnd(environment);
+  Assert.state(!environment.containsProperty("spring.main.environment-prefix"),
+    "Environment prefix cannot be set via properties.");
+  bindToSpringApplication(environment);
+  if (!this.isCustomEnvironment) {
+   EnvironmentConverter environmentConverter = new EnvironmentConverter(getClassLoader());
+   environment = environmentConverter.convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
+  }
+  ConfigurationPropertySources.attach(environment);
+  return environment;
+ }
+```
+
+```java
+private ConfigurableEnvironment getOrCreateEnvironment() {
+  if (this.environment != null) {
+   return this.environment;
+  }
+  // 根据webApplicationType的类型准备不同的环境实现类
+  switch (this.webApplicationType) {
+   case SERVLET:
+    return new ApplicationServletEnvironment();
+   case REACTIVE:
+    return new ApplicationReactiveWebEnvironment();
+   default:
+    return new ApplicationEnvironment();
+  }
+ }
+```
+
+### configureEnvironment
+
+配置spring环境
+
+```java
+protected void configureEnvironment(ConfigurableEnvironment environment, String[] args) {
+  if (this.addConversionService) {
+   // 配置转换服务 比如string转各种类型
+   environment.setConversionService(new ApplicationConversionService());
+  }
+  configurePropertySources(environment, args);
+  // 配置应用环境 这里是个空方法
+  configureProfiles(environment, args);
+ }
+
+```
+
+### configurePropertySources
+
+设置环境的配置文件源
+
+```java
+protected void configurePropertySources(ConfigurableEnvironment environment, String[] args) {
+  MutablePropertySources sources = environment.getPropertySources();
+  if (!CollectionUtils.isEmpty(this.defaultProperties)) {
+   // SpringBoot启动前可以设置配置，所以这里进行一次增加或者合并
+   DefaultPropertiesPropertySource.addOrMerge(this.defaultProperties, sources);
+  }
+  if (this.addCommandLineProperties && args.length > 0) {
+   // 将java启动的参数也配置进spring的环境配置中
+   String name = CommandLinePropertySource.COMMAND_LINE_PROPERTY_SOURCE_NAME;
+   if (sources.contains(name)) {
+    PropertySource<?> source = sources.get(name);
+    CompositePropertySource composite = new CompositePropertySource(name);
+    composite.addPropertySource(
+      new SimpleCommandLinePropertySource("springApplicationCommandLineArgs", args));
+    composite.addPropertySource(source);
+    sources.replace(name, composite);
+   }
+   else {
+    sources.addFirst(new SimpleCommandLinePropertySource(args));
+   }
+  }
+ }
+
+```
+
+### createApplicationContext
+
+```java
+protected ConfigurableApplicationContext createApplicationContext() {
+  // 根据webApplicationType 创建对应的AnnotationApplicationContext servlet or webFlux
+  return this.applicationContextFactory.create(this.webApplicationType);
+}
+```
+
+### prepareContext
+
+```java
+private void prepareContext(DefaultBootstrapContext bootstrapContext, ConfigurableApplicationContext context,
+   ConfigurableEnvironment environment, SpringApplicationRunListeners listeners,
+   ApplicationArguments applicationArguments, Banner printedBanner) {
+  // 赋值环境  
+  context.setEnvironment(environment);
+  // 设置ApplicationContext
+  postProcessApplicationContext(context);
+  // 触发ApplicationContextInitializer 初始化方法 可以对 ApplicationContext 进行设置
+  // SpringApplication 就有添加 ApplicationContextInitializer 的方法
+  applyInitializers(context);
+  // 触发 contextPrepared 事件
+  listeners.contextPrepared(context);
+  // 触发BootstrapContextClosedEvent事件 说明 ApplicationContext has been prepared
+  bootstrapContext.close(context);
+  if (this.logStartupInfo) {
+   logStartupInfo(context.getParent() == null);
+   // 打印当前激活环境信息
+   logStartupProfileInfo(context);
+  }
+  // Add boot specific singleton beans
+  // 获取beanFactory
+  ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+  // 注册单例 applicationArguments
+  beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
+  if (printedBanner != null) {
+   // 注册单例 Banner
+   beanFactory.registerSingleton("springBootBanner", printedBanner);
+  }
+  if (beanFactory instanceof AbstractAutowireCapableBeanFactory) {
+    //设置是否允许循环依赖
+   ((AbstractAutowireCapableBeanFactory) beanFactory).setAllowCircularReferences(this.allowCircularReferences);
+   if (beanFactory instanceof DefaultListableBeanFactory) {
+    // 设置bean覆盖 默认是不允许循环依赖使用的 即false
+    ((DefaultListableBeanFactory) beanFactory)
+      .setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
+   }
+  }
+  if (this.lazyInitialization) {
+   context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
+  }
+  context.addBeanFactoryPostProcessor(new PropertySourceOrderingBeanFactoryPostProcessor(context));
+  // Load the sources
+  // source can be: a class name, package name, or an XML resource location.
+  // 拿到所有的source 即主类 因为我们要根据主类去扫描主类的路径下的所有类
+  Set<Object> sources = getAllSources();
+  Assert.notEmpty(sources, "Sources must not be empty");
+  // 将source注册成bean
+  load(context, sources.toArray(new Object[0]));
+  // 触发 contextLoaded 事件
+  listeners.contextLoaded(context);
+}
+```
+
+### postProcessApplicationContext
+
+设置ApplicationContext 所需的一些东西
+
+```java
+protected void postProcessApplicationContext(ConfigurableApplicationContext context) {
+  // 如果beanName生产者为空 那么就注册一个
+  if (this.beanNameGenerator != null) {
+   context.getBeanFactory().registerSingleton(AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR,
+     this.beanNameGenerator);
+  }
+  if (this.resourceLoader != null) {
+   // applicationContext设置 resourceLoader
+   if (context instanceof GenericApplicationContext) {
+    ((GenericApplicationContext) context).setResourceLoader(this.resourceLoader);
+   }
+   // 设置classLoader
+   if (context instanceof DefaultResourceLoader) {
+    ((DefaultResourceLoader) context).setClassLoader(this.resourceLoader.getClassLoader());
+   }
+  }
+  // 设置类型转换服务
+  if (this.addConversionService) {
+   context.getBeanFactory().setConversionService(context.getEnvironment().getConversionService());
+  }
+ }
+```
+
+### load
+
+```java
+protected void load(ApplicationContext context, Object[] sources) {
+  if (logger.isDebugEnabled()) {
+   logger.debug("Loading source " + StringUtils.arrayToCommaDelimitedString(sources));
+  }
+  BeanDefinitionLoader loader = createBeanDefinitionLoader(getBeanDefinitionRegistry(context), sources);
+  if (this.beanNameGenerator != null) {
+   loader.setBeanNameGenerator(this.beanNameGenerator);
+  }
+  if (this.resourceLoader != null) {
+   loader.setResourceLoader(this.resourceLoader);
+  }
+  if (this.environment != null) {
+   loader.setEnvironment(this.environment);
+  }
+  loader.load();
+}
+```
+
+### getBeanDefinitionRegistry
+
+```java
+private BeanDefinitionRegistry getBeanDefinitionRegistry(ApplicationContext context) {
+  if (context instanceof BeanDefinitionRegistry) {
+   return (BeanDefinitionRegistry) context;
+  }
+  // boot applicationContext 基本都是继承 AbstractApplicationContext
+  // ConfigurableListableBeanFactory 的默认实现是 DefaultListableBeanFactory 实现了 BeanDefinitionRegistry接口
+  // 拥有了注册bean定义信息的能力
+  if (context instanceof AbstractApplicationContext) {
+   return (BeanDefinitionRegistry) ((AbstractApplicationContext) context).getBeanFactory();
+  }
+  throw new IllegalStateException("Could not locate BeanDefinitionRegistry");
+}
+
 ```

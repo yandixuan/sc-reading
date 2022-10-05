@@ -7,7 +7,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
-    "resolveJsonModule": true,   
+    "resolveJsonModule": true,
     "jsx": "preserve",
     "lib": ["ESNext", "DOM"]
   },
