@@ -7,6 +7,23 @@
 private ApplicationContextFactory applicationContextFactory = ApplicationContextFactory.DEFAULT;
 ```
 
+## 构造器
+
+```java
+public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+  this.resourceLoader = resourceLoader;
+  Assert.notNull(primarySources, "PrimarySources must not be null");
+  this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+  this.webApplicationType = WebApplicationType.deduceFromClasspath();
+  this.bootstrapRegistryInitializers = new ArrayList<>(
+    getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+  // 这个地方会 从SPI加载 ApplicationContextInitializer，ApplicationListener
+  setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+  setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+  this.mainApplicationClass = deduceMainApplicationClass();
+}
+```
+
 ## 方法
 
 ### run
@@ -18,6 +35,9 @@ public ConfigurableApplicationContext run(String... args)  {
   // 获取系统时间
   long startTime = System.nanoTime();
   // springboot启动的上下文
+  // 对于boot来说有2种
+  // 1.AnnotationConfigServletWebServerApplicationContext
+  // 2.AnnotationConfigReactiveWebServerApplicationContext
   DefaultBootstrapContext bootstrapContext = createBootstrapContext();
   // ConfigurableApplicationContext 继承了spring的最高容器类 ApplicationContext
   // springboot启动使用该容器

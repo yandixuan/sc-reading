@@ -16,6 +16,9 @@ export default defineConfig({
       copyright: 'Copyright © 2022-present ydx',
     },
   },
+  markdown: {
+    lineNumbers: true,
+  },
 })
 
 function nav() {
@@ -63,9 +66,21 @@ function sidebarSpring() {
       items: [
         { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
         { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
+        { text: 'EventPublishingRunListener', link: '/spring/boot/EventPublishingRunListener' },
         { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },
+        { text: 'ServletWebServerApplicationContext', link: '/spring/boot/ServletWebServerApplicationContext' },
+        { text: 'SharedMetadataReaderFactoryContextInitializer', link: '/spring/boot/SharedMetadataReaderFactoryContextInitializer' },
         { text: 'SpringApplication', link: '/spring/boot/SpringApplication' },
         { text: 'SpringFactoriesLoader', link: '/spring/boot/SpringFactoriesLoader' },
+      ],
+    },
+    {
+      text: 'context',
+      collapsible: true,
+      items: [
+        { text: 'AbstractApplicationContext', link: '/spring/context/AbstractApplicationContext' },
+        { text: 'ConfigurationClassParser', link: '/spring/context/ConfigurationClassParser' },
+        { text: 'ConfigurationClassPostProcessor', link: '/spring/context/ConfigurationClassPostProcessor' },
       ],
     },
     {
@@ -76,5 +91,6 @@ function sidebarSpring() {
         { text: 'PropertySource', link: '/spring/core/PropertySource' },
       ],
     },
+
   ]
 }
