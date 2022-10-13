@@ -173,3 +173,9 @@ protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory b
   }
 }
 ```
+
+### registerBeanPostProcessors
+
+```java
+
+```

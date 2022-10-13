@@ -65,6 +65,7 @@ function sidebarSpring() {
       collapsible: true,
       items: [
         { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
+        { text: 'AutoConfigurationImportSelector', link: '/spring/boot/AutoConfigurationImportSelector' },
         { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
         { text: 'EventPublishingRunListener', link: '/spring/boot/EventPublishingRunListener' },
         { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },
@@ -81,6 +82,15 @@ function sidebarSpring() {
         { text: 'AbstractApplicationContext', link: '/spring/context/AbstractApplicationContext' },
         { text: 'ConfigurationClassParser', link: '/spring/context/ConfigurationClassParser' },
         { text: 'ConfigurationClassPostProcessor', link: '/spring/context/ConfigurationClassPostProcessor' },
+      ],
+    },
+    {
+      text: 'beans',
+      collapsible: true,
+      items: [
+        { text: 'AbstractAutowireCapableBeanFactory', link: '/spring/beans/AbstractAutowireCapableBeanFactory' },
+        { text: 'AbstractBeanDefinition', link: '/spring/beans/AbstractBeanDefinition' },
+        { text: 'InstantiationAwareBeanPostProcessor', link: '/spring/beans/InstantiationAwareBeanPostProcessor' },
       ],
     },
     {

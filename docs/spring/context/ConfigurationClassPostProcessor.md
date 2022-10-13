@@ -39,7 +39,15 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
    }
    // springboot 将 primary class注册成 AnnotatedGenericBeanDefinition
    else if (ConfigurationClassUtils.checkConfigurationClassCandidate(beanDef, this.metadataReaderFactory)) {
-    // 所以boot的主类会进入
+    //检查这个bean是不是一个配置类，是则加入候选者集合
+    //判断的逻辑很简单，就是看是不是有以下注解
+    /**
+     * 1.Configuration
+     * 2.Component
+     * 3.ComponentScan
+     * 4.Import
+     * 5.ImportResource
+     */
     configCandidates.add(new BeanDefinitionHolder(beanDef, beanName));
    }
   }
@@ -86,6 +94,10 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
   Set<ConfigurationClass> alreadyParsed = new HashSet<>(configCandidates.size());
   do {
    StartupStep processConfig = this.applicationStartup.start("spring.context.config-classes.parse");
+  /**
+   * 用解析器解析配置类，把解析到的bean注册为BeanDefinition，
+   * 会循环解析直到候选者集合为空，因为可能不断会有配置类被解析出来
+   */
    parser.parse(candidates);
    parser.validate();
 
