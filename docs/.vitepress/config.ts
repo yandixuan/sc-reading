@@ -85,6 +85,20 @@ function sidebarSpring() {
       ],
     },
     {
+      text: 'aop',
+      collapsible: true,
+      items: [
+        { text: 'Advised', link: '/spring/aop/Advised' },
+        { text: 'Advisor', link: '/spring/aop/Advisor' },
+        { text: 'AopProxyUtils', link: '/spring/aop/AopProxyUtils' },
+        { text: 'DefaultAopProxyFactory', link: '/spring/aop/DefaultAopProxyFactory' },
+        { text: 'DefaultAdvisorChainFactory', link: '/spring/aop/DefaultAdvisorChainFactory' },
+        { text: 'JdkDynamicAopProxy', link: '/spring/aop/JdkDynamicAopProxy' },
+        { text: 'PointcutAdvisor', link: '/spring/aop/PointcutAdvisor' },
+        { text: 'ProxyConfig', link: '/spring/aop/ProxyConfig' },
+      ],
+    },
+    {
       text: 'beans',
       collapsible: true,
       items: [
