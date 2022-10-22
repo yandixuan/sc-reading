@@ -110,6 +110,8 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
       registry, this.sourceExtractor, this.resourceLoader, this.environment,
       this.importBeanNameGenerator, parser.getImportRegistry());
    }
+   // `parser.parse(candidates)`解析出来的 配置类、beanMethod、importResource、ImportBeanDefinitionRegistrar
+   // 继续加载beanDefinition
    this.reader.loadBeanDefinitions(configClasses);
    alreadyParsed.addAll(configClasses);
    processConfig.tag("classCount", () -> String.valueOf(configClasses.size())).end();

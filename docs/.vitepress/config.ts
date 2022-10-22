@@ -80,6 +80,7 @@ function sidebarSpring() {
       collapsible: true,
       items: [
         { text: 'AbstractApplicationContext', link: '/spring/context/AbstractApplicationContext' },
+        { text: 'AspectJAutoProxyRegistrar', link: '/spring/context/AspectJAutoProxyRegistrar' },
         { text: 'ConfigurationClassParser', link: '/spring/context/ConfigurationClassParser' },
         { text: 'ConfigurationClassPostProcessor', link: '/spring/context/ConfigurationClassPostProcessor' },
       ],
@@ -88,14 +89,20 @@ function sidebarSpring() {
       text: 'aop',
       collapsible: true,
       items: [
+        { text: 'AbstractAdvisorAutoProxyCreator', link: '/spring/aop/AbstractAdvisorAutoProxyCreator' },
+        { text: 'AbstractAutoProxyCreator', link: '/spring/aop/AbstractAutoProxyCreator' },
         { text: 'Advised', link: '/spring/aop/Advised' },
         { text: 'Advisor', link: '/spring/aop/Advisor' },
+        { text: 'AnnotationAwareAspectJAutoProxyCreator', link: '/spring/aop/AnnotationAwareAspectJAutoProxyCreator' },
         { text: 'AopProxyUtils', link: '/spring/aop/AopProxyUtils' },
+        { text: 'AspectJProxyUtils', link: '/spring/aop/AspectJProxyUtils' },
+        { text: 'CglibAopProxy', link: '/spring/aop/CglibAopProxy' },
         { text: 'DefaultAopProxyFactory', link: '/spring/aop/DefaultAopProxyFactory' },
         { text: 'DefaultAdvisorChainFactory', link: '/spring/aop/DefaultAdvisorChainFactory' },
         { text: 'JdkDynamicAopProxy', link: '/spring/aop/JdkDynamicAopProxy' },
         { text: 'PointcutAdvisor', link: '/spring/aop/PointcutAdvisor' },
         { text: 'ProxyConfig', link: '/spring/aop/ProxyConfig' },
+        { text: 'ReflectiveMethodInvocation', link: '/spring/aop/ReflectiveMethodInvocation' },
       ],
     },
     {
