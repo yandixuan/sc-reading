@@ -8,11 +8,13 @@
 
 ## 方法
 
-在`ConfigurationClassParser`的L590 处理 ImportBeanDefinitionRegistrar 类实例化的时候会调用 ParserStrategyUtils.instantiateClass 来实例化方法，同时执行spring的Aware方法
+在 `AbstractApplicationContext.refresh` 执行到L567(registerBeanPostProcessors(beanFactory))会从容器取一次 aop的bean
 
-该方法实现了 BeanFactoryAware 所以会接下来执行 initBeanFactory
+拿到初始化后的bean容器自然会执行相应的Aware接口 即 `setBeanFactory`方法
 
 ### setBeanFactory
+
+覆写了
 
 ```java
  @Override
