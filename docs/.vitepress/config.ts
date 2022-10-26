@@ -126,6 +126,18 @@ function sidebarSpring() {
         { text: 'PropertySource', link: '/spring/core/PropertySource' },
       ],
     },
+    {
+      text: 'tx',
+      collapsible: true,
+      items: [
+        { text: 'ProxyTransactionManagementConfiguration', link: '/spring/tx/ProxyTransactionManagementConfiguration' },
+        { text: 'AbstractPlatformTransactionManager', link: '/spring/tx/AbstractPlatformTransactionManager' },
+        { text: 'TransactionAspectSupport', link: '/spring/tx/TransactionAspectSupport' },
+        { text: 'TransactionDefinition', link: '/spring/tx/TransactionDefinition' },
+        { text: 'TransactionManagementConfigurationSelector', link: '/spring/tx/TransactionManagementConfigurationSelector' },
+        { text: 'TransactionSynchronizationManager', link: '/spring/tx/TransactionSynchronizationManager' },
+      ],
+    },
 
   ]
 }

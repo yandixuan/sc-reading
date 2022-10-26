@@ -4,6 +4,11 @@
 
 [参考](https://www.jianshu.com/p/ab6d54c31ff1)
 
+:::tip
+methodProxy.invoke 调用的委托类（委托类的fastclass对应的方法索引就是该方法）
+methodProxy.invokeSuper调用的代理类（代理类的fastclass对应的方法索引是cglib生成的，但是这个方法直接调用的父类的方法）
+:::
+
 ## 方法
 
 ### getProxy
@@ -298,6 +303,22 @@
 
 [该方法继承了 ReflectiveMethodInvocation](./ReflectiveMethodInvocation)
 
+### 构造方法
+
+```java
+  public CglibMethodInvocation(Object proxy, @Nullable Object target, Method method,
+    Object[] arguments, @Nullable Class<?> targetClass,
+    List<Object> interceptorsAndDynamicMethodMatchers, MethodProxy methodProxy) {
+
+   super(proxy, target, method, arguments, targetClass, interceptorsAndDynamicMethodMatchers);
+   // 允许效率的优化，
+   // 虽然cglib能够增强protected方法 但也限于 在本类、本包和不同包的子类中可以使用
+   // 所以只针对public方法 使用methodProxy.invoke 加快运行效率 没什么问题
+   // Only use method proxy for public methods not derived from java.lang.Object
+   this.methodProxy = (isMethodProxyCompatible(method) ? methodProxy : null);
+  }
+```
+
 ### invokeJoinpoint
 
 对方法进行了覆盖,cglib通过mehtodProxy调用原方法
@@ -305,6 +326,8 @@
 ```java
   @Override
   protected Object invokeJoinpoint() throws Throwable {
+   // Cglib中调用被代理类方法是通过事先建立好的索引，索引的建立和获取在FastClass中
+   // 所以效率比反射要来得快多
    if (this.methodProxy != null) {
     try {
      return this.methodProxy.invoke(this.target, this.arguments);
@@ -313,6 +336,7 @@
      logFastClassGenerationFailure(this.method);
     }
    }
+   // 默认通过反射调用委托类方法
    return super.invokeJoinpoint();
   }
 
