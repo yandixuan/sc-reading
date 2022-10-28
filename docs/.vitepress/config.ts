@@ -138,6 +138,14 @@ function sidebarSpring() {
         { text: 'TransactionSynchronizationManager', link: '/spring/tx/TransactionSynchronizationManager' },
       ],
     },
+    {
+      text: 'jdbc',
+      collapsible: true,
+      items: [
+        { text: 'ConnectionHolder', link: '/spring/jdbc/ConnectionHolder' },
+        { text: 'DataSourceTransactionManager', link: '/spring/jdbc/DataSourceTransactionManager' },
+      ],
+    },
 
   ]
 }

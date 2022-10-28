@@ -141,3 +141,96 @@
   }
  }
 ```
+
+## completeTransactionAfterThrowing
+
+```java
+ /**
+  * Handle a throwable, completing the transaction.
+  * We may commit or roll back, depending on the configuration.
+  * @param txInfo information about the current transaction
+  * @param ex throwable encountered
+  */
+ protected void completeTransactionAfterThrowing(@Nullable TransactionInfo txInfo, Throwable ex) {
+  // 但是调用这个方法的位置 txInfo必不为空 我不知道为啥要标记@Nullable
+  // 当抛出异常时，先判断当前是否存在事务，这是基础依据
+  if (txInfo != null && txInfo.getTransactionStatus() != null) {
+   if (logger.isTraceEnabled()) {
+    logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() +
+      "] after exception: " + ex);
+   }
+   /*
+    * 如果事务属性不为null，并且通过事物属性的rollbackOn方法判断出当前的异常需要进行回滚，那么就进行回滚
+    * 声明式事务一般都是这个逻辑
+    */
+   if (txInfo.transactionAttribute != null && txInfo.transactionAttribute.rollbackOn(ex)) {
+    try {
+     // 那么通过事务管理器执行rollback回滚操作 
+     txInfo.getTransactionManager().rollback(txInfo.getTransactionStatus());
+    }
+    catch (TransactionSystemException ex2) {
+     logger.error("Application exception overridden by rollback exception", ex);
+     ex2.initApplicationException(ex);
+     throw ex2;
+    }
+    catch (RuntimeException | Error ex2) {
+     logger.error("Application exception overridden by rollback exception", ex);
+     throw ex2;
+    }
+   }
+   else {
+    // We don't roll back on this exception.
+    // Will still roll back if TransactionStatus.isRollbackOnly() is true.
+    try {
+     // 如果不是指定的异常那么就通过事务管理器提交事务 
+     txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
+    }
+    catch (TransactionSystemException ex2) {
+     logger.error("Application exception overridden by commit exception", ex);
+     ex2.initApplicationException(ex);
+     throw ex2;
+    }
+    catch (RuntimeException | Error ex2) {
+     logger.error("Application exception overridden by commit exception", ex);
+     throw ex2;
+    }
+   }
+  }
+ }
+```
+
+## cleanupTransactionInfo
+
+当前事务已经完成了，恢复旧的TransactionInfo与当前事务的绑定
+
+```java
+ /**
+  * Reset the TransactionInfo ThreadLocal.
+  * <p>Call this in all cases: exception or normal return!
+  * @param txInfo information about the current transaction (may be {@code null})
+  */
+ protected void cleanupTransactionInfo(@Nullable TransactionInfo txInfo) {
+  if (txInfo != null) {
+   txInfo.restoreThreadLocalStatus();
+  }
+ }
+```
+
+## commitTransactionAfterReturning
+
+```java
+ /**
+  * Execute after successful completion of call, but not after an exception was handled.
+  * Do nothing if we didn't create a transaction.
+  * @param txInfo information about the current transaction
+  */
+ protected void commitTransactionAfterReturning(@Nullable TransactionInfo txInfo) {
+  if (txInfo != null && txInfo.getTransactionStatus() != null) {
+   if (logger.isTraceEnabled()) {
+    logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() + "]");
+   }
+   // 通过事务管理器提交事务
+   txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
+  }
+ }
+```
