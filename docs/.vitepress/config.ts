@@ -10,6 +10,7 @@ export default defineConfig({
     sidebar: {
       '/jdk/': sidebarJdk(),
       '/spring/': sidebarSpring(),
+      '/netty': sidebarNetty(),
     },
     footer: {
       message: 'Released under the MIT License.',
@@ -32,6 +33,11 @@ function nav() {
       text: 'Spring',
       activeMatch: '^/spring/',
       link: '/spring/boot/SpringApplication',
+    },
+    {
+      text: 'Netty',
+      activeMatch: '^/netty/',
+      link: '/netty/common/EventExecutorGroup',
     },
   ]
 }
@@ -147,5 +153,31 @@ function sidebarSpring() {
       ],
     },
 
+  ]
+}
+
+function sidebarNetty() {
+  return [
+    {
+      text: 'common',
+      collapsible: true,
+      items: [
+        { text: 'AbstractEventExecutor', link: '/netty/common/AbstractEventExecutor' },
+        { text: 'AbstractEventExecutorGroup', link: '/netty/common/AbstractEventExecutorGroup' },
+        { text: 'EventExecutor', link: '/netty/common/EventExecutor' },
+        { text: 'EventExecutorGroup', link: '/netty/common/EventExecutorGroup' },
+        { text: 'MultithreadEventExecutorGroup', link: '/netty/common/MultithreadEventExecutorGroup' },
+      ],
+    },
+    {
+      text: 'transport',
+      collapsible: true,
+      items: [
+        { text: 'AbstractEventLoop', link: '/netty/transport/AbstractEventLoop' },
+        { text: 'AbstractEventLoopGroup', link: '/netty/transport/AbstractEventLoopGroup' },
+        { text: 'EventLoop', link: '/netty/transport/EventLoop' },
+        { text: 'EventLoopGroup', link: '/netty/transport/EventLoopGroup' },
+      ],
+    },
   ]
 }
