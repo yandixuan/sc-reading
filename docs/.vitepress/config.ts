@@ -164,6 +164,8 @@ function sidebarNetty() {
       items: [
         { text: 'AbstractEventExecutor', link: '/netty/common/AbstractEventExecutor' },
         { text: 'AbstractEventExecutorGroup', link: '/netty/common/AbstractEventExecutorGroup' },
+        { text: 'DefaultPriorityQueue', link: '/netty/common/DefaultPriorityQueue' },
+        { text: 'DefaultPromise', link: '/netty/common/DefaultPromise' },
         { text: 'EventExecutor', link: '/netty/common/EventExecutor' },
         { text: 'EventExecutorGroup', link: '/netty/common/EventExecutorGroup' },
         { text: 'MultithreadEventExecutorGroup', link: '/netty/common/MultithreadEventExecutorGroup' },
