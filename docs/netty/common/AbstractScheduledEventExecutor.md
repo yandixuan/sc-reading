@@ -37,6 +37,36 @@ long nextTaskId;
 
 ## 方法
 
+### deadlineToDelayNanos
+
+计算距离deadlineNanos还剩多少时间（调用ScheduledFutureTask的方法）
+
+```java
+    /**
+     * Given an arbitrary deadline {@code deadlineNanos}, calculate the number of nano seconds from now
+     * {@code deadlineNanos} would expire.
+     * @param deadlineNanos An arbitrary deadline in nano seconds.
+     * @return the number of nano seconds from now {@code deadlineNanos} would expire.
+     */
+    protected static long deadlineToDelayNanos(long deadlineNanos) {
+        return ScheduledFutureTask.deadlineToDelayNanos(defaultCurrentTimeNanos(), deadlineNanos);
+    }
+```
+
+### initialNanoTime
+
+`AbstractScheduledEventExecutor`这个类装载的时间
+
+```java
+    /**
+     * The initial value used for delay and computations based upon a monatomic time source.
+     * @return initial value used for delay and computations based upon a monatomic time source.
+     */
+    protected static long initialNanoTime() {
+        return START_TIME;
+    }
+```
+
 ### ScheduledExecutorService里的实现
 
 ```java
@@ -119,15 +149,21 @@ private <V> ScheduledFuture<V> schedule(final ScheduledFutureTask<V> task) {
       // 把任务丢到队列中去
       scheduleFromEventLoop(task);
   } else {
+      // 如果不属于EventLoop的线程
       // 获取任务的截止时间
       final long deadlineNanos = task.deadlineNanos();
       // task will add itself to scheduled task queue when run if not expired
+      // 在任务提交前的调用
       if (beforeScheduledTaskSubmitted(deadlineNanos)) {
+          // 用eventExecutor线程立即去执行这个定时任务
           execute(task);
       } else {
+          // 与execute类似，但不保证任务会在执行非延迟任务或执行程序关闭之前运行，默认实现只是委托给execute(Runnable)
           lazyExecute(task);
           // Second hook after scheduling to facilitate race-avoidance
+          // afterScheduledTaskSubmitted表示在任务提交后的调用
           if (afterScheduledTaskSubmitted(deadlineNanos)) {
+              // 唤醒阻塞队列
               execute(WAKEUP_TASK);
           }
       }
@@ -165,3 +201,15 @@ PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue() {
 ```
 
 ### removeScheduled
+
+```java
+final void removeScheduled(final ScheduledFutureTask<?> task) {
+    assert task.isCancelled();
+    if (inEventLoop()) {
+        scheduledTaskQueue().removeTyped(task);
+    } else {
+        // task will remove itself from scheduled task queue when it runs
+        lazyExecute(task);
+    }
+}
+```

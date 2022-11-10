@@ -7,6 +7,7 @@ export default defineConfig({
   cleanUrls: 'without-subfolders',
   themeConfig: {
     nav: nav(),
+    outline: [2, 3],
     sidebar: {
       '/jdk/': sidebarJdk(),
       '/spring/': sidebarSpring(),
@@ -169,6 +170,7 @@ function sidebarNetty() {
         { text: 'EventExecutor', link: '/netty/common/EventExecutor' },
         { text: 'EventExecutorGroup', link: '/netty/common/EventExecutorGroup' },
         { text: 'MultithreadEventExecutorGroup', link: '/netty/common/MultithreadEventExecutorGroup' },
+        { text: 'SingleThreadEventExecutor', link: '/netty/common/SingleThreadEventExecutor' },
       ],
     },
     {
@@ -179,6 +181,7 @@ function sidebarNetty() {
         { text: 'AbstractEventLoopGroup', link: '/netty/transport/AbstractEventLoopGroup' },
         { text: 'EventLoop', link: '/netty/transport/EventLoop' },
         { text: 'EventLoopGroup', link: '/netty/transport/EventLoopGroup' },
+        { text: 'NioEventLoop', link: '/netty/transport/NioEventLoop' },
       ],
     },
   ]

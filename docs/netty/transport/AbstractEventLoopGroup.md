@@ -1,7 +1,7 @@
 # AbstractEventLoopGroup
 
 :::tip
-实现了`EventLoopGroup`管理多个`channel`的注册，继承了`AbstractEventExecutorGroup`同时也拥有了管理多线程的能力
+实现了`EventLoopGroup`管理多个`channel`的注册，继承了`AbstractEventExecutorGroup`同时也拥有了管理多个执行器的能力
 :::
 
 ```java

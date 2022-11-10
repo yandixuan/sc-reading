@@ -1,6 +1,6 @@
 {
   "cSpell.ignoreWords": [
     "vitepress", "deque", "antfu", "servlet", "Nanos", "instanceof", "spel", "cglib", "aspectj", "jdbc",
-    "wakeup", "UNCANCELLABLE", "clazz", "Uninterruptibly"
+    "wakeup", "UNCANCELLABLE", "clazz", "Uninterruptibly", "epoll"
   ]
 }
