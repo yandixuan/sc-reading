@@ -177,8 +177,13 @@ function sidebarNetty() {
       text: 'transport',
       collapsible: true,
       items: [
+        { text: 'AbstractBootstrap', link: '/netty/transport/AbstractBootstrap' },
+        { text: 'AbstractChannel', link: '/netty/transport/AbstractChannel' },
         { text: 'AbstractEventLoop', link: '/netty/transport/AbstractEventLoop' },
         { text: 'AbstractEventLoopGroup', link: '/netty/transport/AbstractEventLoopGroup' },
+        { text: 'Channel', link: '/netty/transport/Channel' },
+        { text: 'ChannelPipeline', link: '/netty/transport/ChannelPipeline' },
+        { text: 'DefaultChannelPipeline', link: '/netty/transport/DefaultChannelPipeline' },
         { text: 'EventLoop', link: '/netty/transport/EventLoop' },
         { text: 'EventLoopGroup', link: '/netty/transport/EventLoopGroup' },
         { text: 'NioEventLoop', link: '/netty/transport/NioEventLoop' },

@@ -295,7 +295,7 @@ protected void run() {
                 // 如果没有I/O就绪事件，那么执行任务最多64个
                 ranTasks = runAllTasks(0); // This will run the minimum number of tasks
             }
-
+            // ranTasks代表执行了任务
             if (ranTasks || strategy > 0) {
                 if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
                     logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",

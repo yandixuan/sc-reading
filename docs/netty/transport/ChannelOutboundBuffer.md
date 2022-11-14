@@ -1,0 +1,7 @@
+# ChannelOutboundBuffer
+
+:::tip
+ChannelOutboundBuffer是Netty发送缓存，当Netty调用write时数据不会真正的去发送而是写入到ChannelOutboundBuffer缓存队列，直到调用flush方法Netty才会从ChannelOutboundBuffer取数据发送。每个Unsafe都会绑定一个ChannelOutboundBuffer，也就是说每个客户端连接上服务端都会创建一个ChannelOutboundBuffer绑定客户端Channel。Netty设计ChannelOutboundBuffer是为了减少TCP缓存的压力提高系统的吞吐率。
+:::
+
+[参考](https://blog.csdn.net/cherry93925/article/details/100719573)

@@ -14,11 +14,11 @@
     "upgrade": "pnpm update --interactive --latest"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.29.4",
+    "@antfu/eslint-config": "^0.30.1",
     "eslint": "^8.27.0",
-    "eslint-define-config": "^1.11.0",
+    "eslint-define-config": "^1.12.0",
     "typescript": "^4.8.4",
-    "vitepress": "1.0.0-alpha.27",
-    "vue": "^3.2.41"
+    "vitepress": "1.0.0-alpha.28",
+    "vue": "^3.2.45"
   }
 }
