@@ -150,25 +150,38 @@ void init(Channel channel) {
     final ChannelHandler currentChildHandler = childHandler;
     final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
     final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
-
+    /**
+     * 这里是初始化Channel，往NioServerSocketChannel的管道里面添加了一个 ChannelInitializer
+     * 此时channel还未注册，会将 ChannelInitializer中的ChannelAdded的调用延迟
+     * 在channel与eventLoop绑定后，即AbstractChannel的`register0`后，会立即触发 ChannelInitializer中的ChannelAdded的调用
+     * 即AbstractChannelHandlerContext的`callHandlerAdded0`，即调用当前 ChannelInitializer的 `initChannel`方法
+     */
     p.addLast(new ChannelInitializer<Channel>() {
         @Override
         public void initChannel(final Channel ch) {
             final ChannelPipeline pipeline = ch.pipeline();
             ChannelHandler handler = config.handler();
+            // 这里就是添加我们在`ServerBootstrap`中配置的handler
             if (handler != null) {
+                // 运行到这里，我们的channel已经注册完毕，即会直接调用 handler的initChannel
+                // 即可以通过pipeline添加处理类
                 pipeline.addLast(handler);
             }
-
+            // 执行到这步，我们在`ServerBootstrap`中配置的handler已经被移除
+            // unsafe.fireRead是从pieline的head节点开始传播的
+            // 向channel的线程执行器提交任务，为了是保证用户自定义的handler都在ServerBootstrapAcceptor的前面
+            // 如果不能保证，channel中的数据到了`ServerBootstrapAcceptor`就不会继续传递了
             ch.eventLoop().execute(new Runnable() {
                 @Override
                 public void run() {
+                    // 专门处理新连接的接入, 把新连接的channel绑定在 workerGroup中的某一条线程上
                     pipeline.addLast(new ServerBootstrapAcceptor(
                             ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
                 }
             });
         }
     });
+    // 在 ChannelInitializer 的 initChannel调用完后，该handler都会被移除
 }
 ```
 

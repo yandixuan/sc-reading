@@ -5,9 +5,9 @@
 [默认实现DefaultChannelPipeline](./DefaultChannelPipeline)
 
 :::danger 重要
-`ChannelInboundInvoker`: 入栈的请求处理
+`ChannelInboundInvoker`: 进来的请求处理
 
-`ChannelOutboundInvoker`: 出战的请求处理
+`ChannelOutboundInvoker`: 出去的请求处理
 :::
 
 ```java

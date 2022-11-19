@@ -55,3 +55,17 @@ private static ServerSocketChannel newChannel(SelectorProvider provider, Interne
     }
 }
 ```
+
+### doBind
+
+```java
+@SuppressJava6Requirement(reason = "Usage guarded by java version check")
+@Override
+protected void doBind(SocketAddress localAddress) throws Exception {
+    if (PlatformDependent.javaVersion() >= 7) {
+        javaChannel().bind(localAddress, config.getBacklog());
+    } else {
+        javaChannel().socket().bind(localAddress, config.getBacklog());
+    }
+}
+```

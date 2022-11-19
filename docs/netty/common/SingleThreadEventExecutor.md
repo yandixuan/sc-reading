@@ -147,6 +147,24 @@ protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor
 
 ## 方法
 
+### register
+
+注册通道，交给Channel的`Unsafe`实现类进行注册
+
+```java
+@Override
+public ChannelFuture register(Channel channel) {
+    return register(new DefaultChannelPromise(channel, this));
+}
+
+@Override
+public ChannelFuture register(final ChannelPromise promise) {
+    ObjectUtil.checkNotNull(promise, "promise");
+    promise.channel().unsafe().register(this, promise);
+    return promise;
+}
+```
+
 ### newTaskQueue
 
 ```java

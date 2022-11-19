@@ -8,8 +8,35 @@
 覆盖了AbstractChannel的doRegister，doDeregister方法，正两个方法实现了Channel的selectionKey的注册和注销
 
 实现AbstractChannel的doClose, 这个方法并没有真正关闭channel动作
-
 :::
+
+## 成员变量
+
+```java
+// 基于selector的channel必然是`SelectableChannel`
+private final SelectableChannel ch;
+/**
+ * selector感兴趣事件,在`NioServerSocketChannel`构造方法中传递的是`SelectionKey.OP_ACCEPT`
+ * 
+ */
+protected final int readInterestOp;
+volatile SelectionKey selectionKey;
+boolean readPending;
+private final Runnable clearReadPendingRunnable = new Runnable() {
+    @Override
+    public void run() {
+        clearReadPending0();
+    }
+};
+
+/**
+    * The future of the current connection attempt.  If not null, subsequent
+    * connection attempts will fail.
+    */
+private ChannelPromise connectPromise;
+private Future<?> connectTimeoutFuture;
+private SocketAddress requestedRemoteAddress;
+```
 
 ## 构造方法
 
@@ -45,3 +72,68 @@ protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInter
     }
 }
 ```
+
+## AbstractNioUnsafe
+
+### doRegister
+
+```java
+@Override
+protected void doRegister() throws Exception {
+    boolean selected = false;
+    for (;;) {
+        try {
+            /**
+             * NIO channel注册进selector感兴趣事件为0（仅仅表示注册成功，还不能监听任何网络事件）
+             * 在`doBeginRead`中会调用selector注册感谢趣事件即`SelectionKey.OP_ACCEPT`事件
+             */
+            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+            return;
+        } catch (CancelledKeyException e) {
+            /**
+             * 在服务端收到客户端的连接时，也是通过复用这个方法将`SocketChannel`注册到这个selector中。
+             * 有可能在注册的过程中客户端断开连接则会抛出这个CanceledKeyException异常
+             * 那么这里捕获了异常并且调用select.selectNow，理论上会从selector中移除这个无效的channel
+             * https://segmentfault.com/a/1190000013015303
+             */
+            if (!selected) {
+                // Force the Selector to select now as the "canceled" SelectionKey may still be
+                // cached and not removed because no Select.select(..) operation was called yet.
+                eventLoop().selectNow();
+                selected = true;
+            } else {
+                // We forced a select operation on the selector before but the SelectionKey is still cached
+                // for whatever reason. JDK bug ?
+                throw e;
+            }
+        }
+    }
+}
+```
+
+### doBeginRead
+
+```java
+@Override
+protected void doBeginRead() throws Exception {
+    // Channel.read() or ChannelHandlerContext.read() was called
+    final SelectionKey selectionKey = this.selectionKey;
+    // 判断selectionKey是否有效，无效则不读
+    if (!selectionKey.isValid()) {
+        return;
+    }
+
+    readPending = true;
+
+    final int interestOps = selectionKey.interestOps();
+    // `AbstractNioChannel`初始化会通过子类传递的`readInterestOp`
+    // 对感兴趣的事件就行合并
+    if ((interestOps & readInterestOp) == 0) {
+        // 设置 selectionKey 感兴趣的事件
+        // 对于`NioServerSocketChannel`来说就是`SelectionKey.OP_ACCEPT`
+        selectionKey.interestOps(interestOps | readInterestOp);
+    }
+}
+```
+
+### doBind

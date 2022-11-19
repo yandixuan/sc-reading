@@ -200,6 +200,7 @@ private ChannelFuture doBind(final SocketAddress localAddress) {
         return promise;
     } else {
         // Registration future is almost always fulfilled already, but just in case it's not.
+        // 异步操作还没未完成，添加监听
         final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
         regFuture.addListener(new ChannelFutureListener() {
             @Override
@@ -212,8 +213,9 @@ private ChannelFuture doBind(final SocketAddress localAddress) {
                 } else {
                     // Registration was successful, so set the correct executor to use.
                     // See https://github.com/netty/netty/issues/2586
+                    // channel已经注册成功与eventLoop已经绑定
                     promise.registered();
-
+                    // 绑定端口
                     doBind0(regFuture, channel, localAddress, promise);
                 }
             }
@@ -267,3 +269,27 @@ final ChannelFuture initAndRegister() {
 ```
 
 ### doBind0
+
+bind0这个方法，是由Reactor线程来负责执行的，但是此时register0方法并没有执行完毕，还需要执行后面的逻辑，而绑定逻辑需要在注册逻辑执行完之后执行，所以在doBind0方法中Reactor线程会将绑定操作封装成异步任务先提交给taskQueue中保存，这样可以使Reactor线程立马从safeSetSuccess中返回，继续执行剩下的register0方法逻辑
+
+```java
+private static void doBind0(
+        final ChannelFuture regFuture, final Channel channel,
+        final SocketAddress localAddress, final ChannelPromise promise) {
+
+    // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
+    // the pipeline in its channelRegistered() implementation.
+    channel.eventLoop().execute(new Runnable() {
+        @Override
+        public void run() {
+            if (regFuture.isSuccess()) {
+                // 交由DefaultChannelPipeline#bind调用
+                // bind事件在Netty中被定义为outbound事件，所以它在pipeline中是反向传播。先从TailContext开始反向传播直到HeadContext
+                channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+            } else {
+                promise.setFailure(regFuture.cause());
+            }
+        }
+    });
+}
+```

@@ -179,8 +179,11 @@ function sidebarNetty() {
       items: [
         { text: 'AbstractBootstrap', link: '/netty/transport/AbstractBootstrap' },
         { text: 'AbstractChannel', link: '/netty/transport/AbstractChannel' },
+        { text: 'AbstractChannelHandlerContext', link: '/netty/transport/AbstractChannelHandlerContext' },
         { text: 'AbstractEventLoop', link: '/netty/transport/AbstractEventLoop' },
         { text: 'AbstractEventLoopGroup', link: '/netty/transport/AbstractEventLoopGroup' },
+        { text: 'AbstractNioChannel', link: '/netty/transport/AbstractNioChannel' },
+        { text: 'AbstractNioMessageChannel', link: '/netty/transport/AbstractNioMessageChannel' },
         { text: 'Channel', link: '/netty/transport/Channel' },
         { text: 'ChannelPipeline', link: '/netty/transport/ChannelPipeline' },
         { text: 'DefaultChannelPipeline', link: '/netty/transport/DefaultChannelPipeline' },
