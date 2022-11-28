@@ -74,6 +74,9 @@ function sidebarSpring() {
         { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
         { text: 'AutoConfigurationImportSelector', link: '/spring/boot/AutoConfigurationImportSelector' },
         { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
+        { text: 'ConfigDataEnvironment', link: '/spring/boot/ConfigDataEnvironment' },
+        { text: 'ConfigDataEnvironmentPostProcessor', link: '/spring/boot/ConfigDataEnvironmentPostProcessor' },
+        { text: 'EnvironmentPostProcessorApplicationListener', link: '/spring/boot/EnvironmentPostProcessorApplicationListener' },
         { text: 'EventPublishingRunListener', link: '/spring/boot/EventPublishingRunListener' },
         { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },
         { text: 'ServletWebServerApplicationContext', link: '/spring/boot/ServletWebServerApplicationContext' },
@@ -87,9 +90,13 @@ function sidebarSpring() {
       collapsible: true,
       items: [
         { text: 'AbstractApplicationContext', link: '/spring/context/AbstractApplicationContext' },
+        { text: 'AbstractApplicationEventMulticaster', link: '/spring/context/AbstractApplicationEventMulticaster' },
         { text: 'AspectJAutoProxyRegistrar', link: '/spring/context/AspectJAutoProxyRegistrar' },
+        { text: 'ConfigurationClassBeanDefinitionReader', link: '/spring/context/ConfigurationClassBeanDefinitionReader' },
         { text: 'ConfigurationClassParser', link: '/spring/context/ConfigurationClassParser' },
         { text: 'ConfigurationClassPostProcessor', link: '/spring/context/ConfigurationClassPostProcessor' },
+        { text: 'PostProcessorRegistrationDelegate', link: '/spring/context/PostProcessorRegistrationDelegate' },
+        { text: 'SimpleApplicationEventMulticaster', link: '/spring/context/SimpleApplicationEventMulticaster' },
       ],
     },
     {
@@ -129,8 +136,11 @@ function sidebarSpring() {
       text: 'core',
       collapsible: true,
       items: [
+        { text: 'AbstractPropertyResolver', link: '/spring/core/AbstractPropertyResolver' },
         { text: 'MutablePropertySources', link: '/spring/core/MutablePropertySources' },
+        { text: 'PropertyPlaceholderHelper', link: '/spring/core/PropertyPlaceholderHelper' },
         { text: 'PropertySource', link: '/spring/core/PropertySource' },
+        { text: 'PropertySourcesPropertyResolver', link: '/spring/core/PropertySourcesPropertyResolver' },
       ],
     },
     {
