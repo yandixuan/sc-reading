@@ -166,11 +166,18 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
   // Create and configure the environment
   // 创建环境
   ConfigurableEnvironment environment = getOrCreateEnvironment();
-  // 注入commonLine配置源，并提高有限级到最高。
+  // 配置springApplicationCommandLineArgs、defaultProperties、Profiles
   configureEnvironment(environment, applicationArguments.getSourceArgs());
+  // 添加configurationProperties属性
+  /**
+   * 将environment的PropertySource列表封装到 `ConfigurationPropertySourcesPropertySource`(source是`SpringConfigurationPropertySources`)
+   * SpringConfigurationPropertySources实现了`ConfigurationPropertySource`的迭代器
+   * 在`SpringConfigurationPropertySources`遍历的时候会忽略自身，而去遍历其他的PropertySource
+   */
   ConfigurationPropertySources.attach(environment);
   // 发布environmentPrepared事件
   listeners.environmentPrepared(bootstrapContext, environment);
+  // 将defaultProperties属性移到最后面，因为是默认，所有在后面兜底
   DefaultPropertiesPropertySource.moveToEnd(environment);
   Assert.state(!environment.containsProperty("spring.main.environment-prefix"),
     "Environment prefix cannot be set via properties.");
@@ -179,6 +186,7 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
    EnvironmentConverter environmentConverter = new EnvironmentConverter(getClassLoader());
    environment = environmentConverter.convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
   }
+  // 就是此处，把上述解析的所有配置文件PropertySources，添加到key为configurationProperties的PropertySource对象中，并添加到PropertySources的第一个元素中
   ConfigurationPropertySources.attach(environment);
   return environment;
  }

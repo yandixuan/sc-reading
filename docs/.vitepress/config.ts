@@ -51,6 +51,8 @@ function sidebarJdk() {
       items: [
         { text: 'ArrayDeque', link: '/jdk/collection/ArrayDeque' },
         { text: 'ArrayList', link: '/jdk/collection/ArrayList' },
+        { text: 'HashMap', link: '/jdk/collection/HashMap' },
+        { text: 'TreeNode', link: '/jdk/collection/TreeNode' },
       ],
     },
     {
@@ -76,6 +78,7 @@ function sidebarSpring() {
         { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
         { text: 'ConfigDataEnvironment', link: '/spring/boot/ConfigDataEnvironment' },
         { text: 'ConfigDataEnvironmentPostProcessor', link: '/spring/boot/ConfigDataEnvironmentPostProcessor' },
+        { text: 'ConfigDataLocationResolvers', link: '/spring/boot/ConfigDataLocationResolvers' },
         { text: 'EnvironmentPostProcessorApplicationListener', link: '/spring/boot/EnvironmentPostProcessorApplicationListener' },
         { text: 'EventPublishingRunListener', link: '/spring/boot/EventPublishingRunListener' },
         { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },

@@ -8,17 +8,15 @@ ArrayDeque 是可调整大小的双端队列实现。
 
 用作队列的实现，性能优于 LinkedList
 
-# Motivation
+## Motivation
 
 从尾追加数据，从头出列数据，会出现实际数组有空的单元，但却 tail 会超过数组容量的情况，我们称之为假溢出；
 但往往，不可能是一种容量固定的数组，一般会有实现自动扩容的方法，但即便可以扩容，按照上面的逻辑，数组容量不断扩大，tail 值一直向后，
 但从头出列的数据越来起多，前面空的内存单造成的浪费更是不能忽略了。所以，为了解决数组单元浪费的问题，就产生了循环数组
 
 ```java
-public class ArrayDeque<E> extends AbstractCollection<E>
-        implements Deque<E>, Cloneable, Serializable {
-         ...省略
-        }
+public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E>, Cloneable, Serializable {
+}
 ```
 
 ::: tip 重要
@@ -34,21 +32,20 @@ public class ArrayDeque<E> extends AbstractCollection<E>
 ## 属性
 
 ```java
-    // 存放数据的数组
-    transient Object[] elements;
-    // 头部索引，指向需要出列的元素
-    transient int head;
-    // 尾部索引，代表着下一个添加进来元素的位置
-    transient int tail;
-    /**
-    *   数组的容量应该是2的次方，最小8
-    *   为什么数组的大小要是2的幂次方呢？既然是循环数组 当head为0是时减1为负数肯定是不行的 那么直接根据长度
-    *   进行取模就是 我们的下标 index % len = index & (length - 1) 当长度为2的幂次方时 计算可以这样优化这也是为什么
-    *   数组的容量要是2的幂次方
-    *   eg: 比如现在 idnex=0 数组长度是8 （0-1) & (7) = 7 那么这样就实现了循环数组了
-    */
-    private static final int MIN_INITIAL_CAPACITY = 8;
-
+// 存放数据的数组
+transient Object[] elements;
+// 头部索引，指向需要出列的元素
+transient int head;
+// 尾部索引，代表着下一个添加进来元素的位置
+transient int tail;
+/**
+*   数组的容量应该是2的次方，最小8
+*   为什么数组的大小要是2的幂次方呢？既然是循环数组 当head为0是时减1为负数肯定是不行的 那么直接根据长度
+*   进行取模就是 我们的下标 index % len = index & (length - 1) 当长度为2的幂次方时 计算可以这样优化这也是为什么
+*   数组的容量要是2的幂次方
+*   eg: 比如现在 index=0 数组长度是8 （0-1) & (7) = 7 那么这样就实现了循环数组了
+*/
+private static final int MIN_INITIAL_CAPACITY = 8;
 ```
 
 ## 方法
@@ -103,7 +100,9 @@ int 型 4 字节 4 \* 8 = 32 位
 
 ### addFirst
 
-ArrayDeque 初始化的时候 head,tail=0
+因为elements.length是2的倍数，所以，位运算类似做%得到其余数
+
+无论`head`-1还是`tail`+1都会实现循环下标位置
 
 ```java
 
@@ -128,8 +127,9 @@ ArrayDeque 初始化的时候 head,tail=0
             throw new NullPointerException();
         // 直接在尾部index放置元素
         elements[tail] = e;
-        // 尾部指针向右移动 并且判断是否与头部指针重合 如果重合那么就执行扩容方法
+        // 尾元素index+1，计算数组对应的索引位置如果与`head`相等及容量不够需要扩容
         if ((tail = (tail + 1) & (elements.length - 1)) == head)
+            // 2倍容量
             doubleCapacity();
     }
 ```
@@ -166,26 +166,39 @@ ArrayDeque 初始化的时候 head,tail=0
 
 ### pollFirst
 
+移除队头
+
 ```java
-    /**
-    *   移除队头
-    *
-    */
-    public E pollFirst() {
-        // 那么头指针的元素要移除队头
-        int h = head;
-        @SuppressWarnings("unchecked")
-        E result = (E) elements[h];
-        // 如果队列为空返回空
-        // Element is null if deque empty
-        if (result == null)
-            return null;
-        // GC help
-        elements[h] = null;     // Must null out slot
-        // 头部索引向右移动一位
-        head = (h + 1) & (elements.length - 1);
-        return result;
-    }
+
+public E pollFirst() {
+    // 那么头指针的元素要移除队头
+    int h = head;
+    @SuppressWarnings("unchecked")
+    E result = (E) elements[h];
+    // 如果队列为空返回空
+    // Element is null if deque empty
+    if (result == null)
+        return null;
+    // GC help
+    elements[h] = null;     // Must null out slot
+    // 头部索引向右移动一位
+    head = (h + 1) & (elements.length - 1);
+    return result;
+}
 ```
 
 ### pollLast
+
+```java
+
+public E pollLast() {
+    int t = (tail - 1) & (elements.length - 1);
+    @SuppressWarnings("unchecked")
+    E result = (E) elements[t];
+    if (result == null)
+        return null;
+    elements[t] = null;
+    tail = t;
+    return result;
+}
+```
