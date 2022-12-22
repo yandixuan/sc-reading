@@ -9,7 +9,7 @@ export default defineConfig({
     nav: nav(),
     outline: [2, 3],
     sidebar: {
-      '/jdk/': sidebarJdk(),
+      '/java/': sidebarJdk(),
       '/spring/': sidebarSpring(),
       '/netty': sidebarNetty(),
     },
@@ -28,7 +28,7 @@ function nav() {
     {
       text: 'Jdk',
       activeMatch: '^/jdk/',
-      link: '/jdk/collection/ArrayDeque',
+      link: '/java/util/DualPivotQuicksort',
     },
     {
       text: 'Spring',
@@ -46,21 +46,22 @@ function nav() {
 function sidebarJdk() {
   return [
     {
-      text: 'collection',
+      text: 'util',
       collapsible: true,
       items: [
-        { text: 'ArrayDeque', link: '/jdk/collection/ArrayDeque' },
-        { text: 'ArrayList', link: '/jdk/collection/ArrayList' },
-        { text: 'HashMap', link: '/jdk/collection/HashMap' },
-        { text: 'TreeNode', link: '/jdk/collection/TreeNode' },
+        { text: 'ArrayDeque', link: '/java/util/ArrayDeque' },
+        { text: 'DualPivotQuicksort', link: '/java/util/DualPivotQuicksort' },
+        { text: 'ArrayList', link: '/java/util/ArrayList' },
+        { text: 'HashMap', link: '/java/util/HashMap' },
+        { text: 'TreeNode', link: '/java/util/TreeNode' },
       ],
     },
     {
       text: 'concurrent',
       collapsible: true,
       items: [
-        { text: 'AbstractExecutorService', link: '/jdk/concurrent/AbstractExecutorService' },
-        { text: 'ExecutorService', link: '/jdk/concurrent/ExecutorService' },
+        { text: 'AbstractExecutorService', link: '/java/util/concurrent/AbstractExecutorService' },
+        { text: 'ExecutorService', link: '/java/util/concurrent/ExecutorService' },
       ],
     },
 

@@ -13,3 +13,9 @@ protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactor
   registerWebApplicationScopes();
 }
 ```
+
+### onRefresh
+
+### getSelfInitializer
+
+### selfInitialize
