@@ -53,6 +53,8 @@ function sidebarJdk() {
         { text: 'DualPivotQuicksort', link: '/java/util/DualPivotQuicksort' },
         { text: 'ArrayList', link: '/java/util/ArrayList' },
         { text: 'HashMap', link: '/java/util/HashMap' },
+        { text: 'PriorityQueue', link: '/java/util/PriorityQueue' },
+        { text: 'TimSort', link: '/java/util/TimSort' },
         { text: 'TreeNode', link: '/java/util/TreeNode' },
       ],
     },
