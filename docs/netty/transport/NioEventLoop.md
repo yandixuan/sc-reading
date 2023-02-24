@@ -335,7 +335,7 @@ protected void run() {
         }
     }
 }
-``
+```
 
 ### processSelectedKeys
 
@@ -564,4 +564,49 @@ protected boolean afterScheduledTaskSubmitted(long deadlineNanos) {
     // Note this is also correct for the nextWakeupNanos == -1 (AWAKE) case
     return deadlineNanos < nextWakeupNanos.get();
 }
+```
+
+### register
+
+不用分析，如注释所言，netty创建的NIO不会走这里
+
+```java
+    /**
+     * Registers an arbitrary {@link SelectableChannel}, not necessarily created by Netty, to the {@link Selector}
+     * of this event loop.  Once the specified {@link SelectableChannel} is registered, the specified {@code task} will
+     * be executed by this event loop when the {@link SelectableChannel} is ready.
+     */
+    public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
+        ObjectUtil.checkNotNull(ch, "ch");
+        if (interestOps == 0) {
+            throw new IllegalArgumentException("interestOps must be non-zero.");
+        }
+        if ((interestOps & ~ch.validOps()) != 0) {
+            throw new IllegalArgumentException(
+                    "invalid interestOps: " + interestOps + "(validOps: " + ch.validOps() + ')');
+        }
+        ObjectUtil.checkNotNull(task, "task");
+
+        if (isShutdown()) {
+            throw new IllegalStateException("event loop shut down");
+        }
+
+        if (inEventLoop()) {
+            register0(ch, interestOps, task);
+        } else {
+            try {
+                // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
+                // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
+                submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        register0(ch, interestOps, task);
+                    }
+                }).sync();
+            } catch (InterruptedException ignore) {
+                // Even if interrupted we did schedule it so just mark the Thread as interrupted.
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
 ```
