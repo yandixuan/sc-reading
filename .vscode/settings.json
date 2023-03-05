@@ -1,7 +1,3 @@
 {
-  "cSpell.ignoreWords": [
-    "vitepress", "deque", "antfu", "servlet", "Nanos", "instanceof", "spel", "cglib", "aspectj", "jdbc",
-    "wakeup", "UNCANCELLABLE", "clazz", "Uninterruptibly", "epoll", "Alloc", "Inet", "Unwritable", "Skippable",
-    "TREEIFY", "UNTREEIFY", "treeified", "untreeifying", "treeification", "xppl", "xppr","heapify"
-  ]
+  "cSpell.enabled": false
 }

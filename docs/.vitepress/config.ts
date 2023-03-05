@@ -4,7 +4,7 @@ export default defineConfig({
   title: '源码阅读',
   description: 'Just playing around.',
   lastUpdated: true,
-  cleanUrls: 'without-subfolders',
+  cleanUrls: true,
   themeConfig: {
     nav: nav(),
     outline: [2, 3],
@@ -12,6 +12,7 @@ export default defineConfig({
       '/java/': sidebarJdk(),
       '/spring/': sidebarSpring(),
       '/netty': sidebarNetty(),
+      '/redis': sidebarRedis(),
     },
     footer: {
       message: 'Released under the MIT License.',
@@ -39,6 +40,11 @@ function nav() {
       text: 'Netty',
       activeMatch: '^/netty/',
       link: '/netty/common/EventExecutorGroup',
+    },
+    {
+      text: 'Redis',
+      activeMatch: '^/redis/',
+      link: '/redis/zmalloc',
     },
   ]
 }
@@ -206,6 +212,18 @@ function sidebarNetty() {
         { text: 'EventLoop', link: '/netty/transport/EventLoop' },
         { text: 'EventLoopGroup', link: '/netty/transport/EventLoopGroup' },
         { text: 'NioEventLoop', link: '/netty/transport/NioEventLoop' },
+      ],
+    },
+  ]
+}
+
+function sidebarRedis() {
+  return [
+    {
+      collapsible: true,
+      items: [
+        { text: 'sds', link: '/redis/sds' },
+        { text: 'zmalloc', link: '/redis/zmalloc' },
       ],
     },
   ]
