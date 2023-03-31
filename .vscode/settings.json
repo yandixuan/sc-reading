@@ -1,3 +1,7 @@
 {
-  "cSpell.enabled": false
+  "cSpell.enabled": false,
+  "markdownlint.config": {
+    "MD051": false,
+    "MD024": false
+  }
 }
