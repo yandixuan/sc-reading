@@ -135,7 +135,7 @@ public B localAddress(InetAddress inetHost, int inetPort) {
 
 ### bind
 
-绑定本地地址，最后都调用[`doBind(localAddress)`](#dobind)方法
+绑定本地地址，最后都调用[`doBind(localAddress)`](#doBind)方法
 
 ```java
 /**

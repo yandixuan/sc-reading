@@ -4,7 +4,7 @@
 
 继承`Iterable<EventExecutor>`就成立一个迭代器即`EventExecutor`的容器
 
-:::tip
+:::tip 注意
 通过该接口拥有管理`EventExecutor`的能力，通过`next`提供`EventExecutor`供使用
 :::
 

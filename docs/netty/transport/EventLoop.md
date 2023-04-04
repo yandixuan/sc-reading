@@ -1,6 +1,6 @@
 # EventLoop
 
-:::tip
+:::tip 注意
 可以理解为绑定一个channel,处理其所有的I/O事件，类似`EventExecutor`单线程处理器
 :::
 

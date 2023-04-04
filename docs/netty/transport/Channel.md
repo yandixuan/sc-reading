@@ -1,6 +1,6 @@
 # Channel
 
-:::tip
+:::tip 注意
 channel是一个管道,用于连接字节缓冲区Buf和另一端的实体,这个实例可以是Socket,也可以是File, 在Nio网络编程模型中, 服务端和客户端进行IO数据交互(得到彼此推送的信息)的媒介就是Channel
 :::
 

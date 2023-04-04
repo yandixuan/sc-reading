@@ -1,6 +1,6 @@
 # AbstractEventLoopGroup
 
-:::tip
+:::tip 注意
 实现了`EventLoopGroup`管理多个`channel`的注册，继承了`AbstractEventExecutorGroup`同时也拥有了管理多个执行器的能力
 :::
 

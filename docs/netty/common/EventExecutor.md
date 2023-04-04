@@ -1,6 +1,6 @@
 # EventExecutor
 
-:::tip
+:::tip 注意
 `EventExecutor`就是一个单线程的Executor，至于为什么继承`EventExecutorGroup`，可能仅仅是为了继承那些接口拥有线程执行的能力
 :::
 

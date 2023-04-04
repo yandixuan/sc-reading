@@ -2,7 +2,7 @@
 
 实现了`EventExecutorGroup`
 
-:::tip
+:::tip 注意
 `AbstractEventExecutorGroup`基本上是对`EventExecutorGroup`中接口的一些实现
 
 几乎所有EventExecutorGroup中的方法实现，都是调用next()方法来完成的

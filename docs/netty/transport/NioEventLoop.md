@@ -5,86 +5,86 @@
 ## 属性
 
 ```java
-  // selector 在 select 发生事件后，会把事件相关的 key 放入 selectedKeys 集合，当事件处理完后不会主动的从 selectedKeys 集合中删除，所以需要自行删除。
-  // 记录socketChannel从Selector上注销的个数 达到256个 则需要将无效selectKey从SelectedKeys集合中清除掉
-  private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
-  // 是否禁用selectionKeySet优化
-  private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
-          SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
+// selector 在 select 发生事件后，会把事件相关的 key 放入 selectedKeys 集合，当事件处理完后不会主动的从 selectedKeys 集合中删除，所以需要自行删除。
+// 记录socketChannel从Selector上注销的个数 达到256个 则需要将无效selectKey从SelectedKeys集合中清除掉
+private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
+// 是否禁用selectionKeySet优化
+private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
+        SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
-  private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
-  // 标识Selector空轮询的阈值，当超过这个阈值的话则需要重构Selector
-  // epoll bug，它会导致Selector空轮询，最终导致CPU 100%
-  private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
+private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
+// 标识Selector空轮询的阈值，当超过这个阈值的话则需要重构Selector
+// epoll bug，它会导致Selector空轮询，最终导致CPU 100%
+private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
 
-  private final IntSupplier selectNowSupplier = new IntSupplier() {
-      @Override
-      public int get() throws Exception {
-          return selectNow();
-      }
-  };
+private final IntSupplier selectNowSupplier = new IntSupplier() {
+    @Override
+    public int get() throws Exception {
+        return selectNow();
+    }
+};
 
-  // Workaround for JDK NIO bug.
-  //
-  // See:
-  // - https://bugs.openjdk.java.net/browse/JDK-6427854 for first few dev (unreleased) builds of JDK 7
-  // - https://bugs.openjdk.java.net/browse/JDK-6527572 for JDK prior to 5.0u15-rev and 6u10
-  // - https://github.com/netty/netty/issues/203
-  static {
-      if (PlatformDependent.javaVersion() < 7) {
-          final String key = "sun.nio.ch.bugLevel";
-          final String bugLevel = SystemPropertyUtil.get(key);
-          if (bugLevel == null) {
-              try {
-                  AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                      @Override
-                      public Void run() {
-                          System.setProperty(key, "");
-                          return null;
-                      }
-                  });
-              } catch (final SecurityException e) {
-                  logger.debug("Unable to get/set System Property: " + key, e);
-              }
-          }
-      }
-      // 但是如果指定的io.netty.selectorAutoRebuildThreshold小于3在Netty中被视为关闭了该功能
-      int selectorAutoRebuildThreshold = SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold", 512);
-      if (selectorAutoRebuildThreshold < MIN_PREMATURE_SELECTOR_RETURNS) {
-          selectorAutoRebuildThreshold = 0;
-      }
+// Workaround for JDK NIO bug.
+//
+// See:
+// - https://bugs.openjdk.java.net/browse/JDK-6427854 for first few dev (unreleased) builds of JDK 7
+// - https://bugs.openjdk.java.net/browse/JDK-6527572 for JDK prior to 5.0u15-rev and 6u10
+// - https://github.com/netty/netty/issues/203
+static {
+    if (PlatformDependent.javaVersion() < 7) {
+        final String key = "sun.nio.ch.bugLevel";
+        final String bugLevel = SystemPropertyUtil.get(key);
+        if (bugLevel == null) {
+            try {
+                AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                    @Override
+                    public Void run() {
+                        System.setProperty(key, "");
+                        return null;
+                    }
+                });
+            } catch (final SecurityException e) {
+                logger.debug("Unable to get/set System Property: " + key, e);
+            }
+        }
+    }
+    // 但是如果指定的io.netty.selectorAutoRebuildThreshold小于3在Netty中被视为关闭了该功能
+    int selectorAutoRebuildThreshold = SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold", 512);
+    if (selectorAutoRebuildThreshold < MIN_PREMATURE_SELECTOR_RETURNS) {
+        selectorAutoRebuildThreshold = 0;
+    }
 
-      SELECTOR_AUTO_REBUILD_THRESHOLD = selectorAutoRebuildThreshold;
+    SELECTOR_AUTO_REBUILD_THRESHOLD = selectorAutoRebuildThreshold;
 
-      if (logger.isDebugEnabled()) {
-          logger.debug("-Dio.netty.noKeySetOptimization: {}", DISABLE_KEY_SET_OPTIMIZATION);
-          logger.debug("-Dio.netty.selectorAutoRebuildThreshold: {}", SELECTOR_AUTO_REBUILD_THRESHOLD);
-      }
-  }
+    if (logger.isDebugEnabled()) {
+        logger.debug("-Dio.netty.noKeySetOptimization: {}", DISABLE_KEY_SET_OPTIMIZATION);
+        logger.debug("-Dio.netty.selectorAutoRebuildThreshold: {}", SELECTOR_AUTO_REBUILD_THRESHOLD);
+    }
+}
 
-  /**
-    * The NIO {@link Selector}.
-    */
-  private Selector selector;
-  private Selector unwrappedSelector;
-  private SelectedSelectionKeySet selectedKeys;
+/**
+* The NIO {@link Selector}.
+*/
+private Selector selector;
+private Selector unwrappedSelector;
+private SelectedSelectionKeySet selectedKeys;
 
-  private final SelectorProvider provider;
+private final SelectorProvider provider;
 
-  private static final long AWAKE = -1L;
-  private static final long NONE = Long.MAX_VALUE;
+private static final long AWAKE = -1L;
+private static final long NONE = Long.MAX_VALUE;
 
-  // nextWakeupNanos is:
-  //    AWAKE            when EL is awake
-  //    NONE             when EL is waiting with no wakeup scheduled
-  //    other value T    when EL is waiting with wakeup scheduled at time T
-  private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
+// nextWakeupNanos is:
+//    AWAKE            when EL is awake
+//    NONE             when EL is waiting with no wakeup scheduled
+//    other value T    when EL is waiting with wakeup scheduled at time T
+private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
 
-  private final SelectStrategy selectStrategy;
+private final SelectStrategy selectStrategy;
 
-  private volatile int ioRatio = 50;
-  private int cancelledKeys;
-  private boolean needsToSelectAgain;
+private volatile int ioRatio = 50;
+private int cancelledKeys;
+private boolean needsToSelectAgain;
 ```
 
 ### openSelector
@@ -571,42 +571,42 @@ protected boolean afterScheduledTaskSubmitted(long deadlineNanos) {
 不用分析，如注释所言，netty创建的NIO不会走这里
 
 ```java
-    /**
-     * Registers an arbitrary {@link SelectableChannel}, not necessarily created by Netty, to the {@link Selector}
-     * of this event loop.  Once the specified {@link SelectableChannel} is registered, the specified {@code task} will
-     * be executed by this event loop when the {@link SelectableChannel} is ready.
-     */
-    public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
-        ObjectUtil.checkNotNull(ch, "ch");
-        if (interestOps == 0) {
-            throw new IllegalArgumentException("interestOps must be non-zero.");
-        }
-        if ((interestOps & ~ch.validOps()) != 0) {
-            throw new IllegalArgumentException(
-                    "invalid interestOps: " + interestOps + "(validOps: " + ch.validOps() + ')');
-        }
-        ObjectUtil.checkNotNull(task, "task");
+/**
+ * Registers an arbitrary {@link SelectableChannel}, not necessarily created by Netty, to the {@link Selector}
+ * of this event loop.  Once the specified {@link SelectableChannel} is registered, the specified {@code task} will
+ * be executed by this event loop when the {@link SelectableChannel} is ready.
+ */
+public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
+    ObjectUtil.checkNotNull(ch, "ch");
+    if (interestOps == 0) {
+        throw new IllegalArgumentException("interestOps must be non-zero.");
+    }
+    if ((interestOps & ~ch.validOps()) != 0) {
+        throw new IllegalArgumentException(
+                "invalid interestOps: " + interestOps + "(validOps: " + ch.validOps() + ')');
+    }
+    ObjectUtil.checkNotNull(task, "task");
 
-        if (isShutdown()) {
-            throw new IllegalStateException("event loop shut down");
-        }
+    if (isShutdown()) {
+        throw new IllegalStateException("event loop shut down");
+    }
 
-        if (inEventLoop()) {
-            register0(ch, interestOps, task);
-        } else {
-            try {
-                // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
-                // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
-                submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        register0(ch, interestOps, task);
-                    }
-                }).sync();
-            } catch (InterruptedException ignore) {
-                // Even if interrupted we did schedule it so just mark the Thread as interrupted.
-                Thread.currentThread().interrupt();
-            }
+    if (inEventLoop()) {
+        register0(ch, interestOps, task);
+    } else {
+        try {
+            // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
+            // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
+            submit(new Runnable() {
+                @Override
+                public void run() {
+                    register0(ch, interestOps, task);
+                }
+            }).sync();
+        } catch (InterruptedException ignore) {
+            // Even if interrupted we did schedule it so just mark the Thread as interrupted.
+            Thread.currentThread().interrupt();
         }
     }
+}
 ```

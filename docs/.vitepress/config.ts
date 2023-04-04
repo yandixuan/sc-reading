@@ -21,6 +21,10 @@ export default defineConfig({
   },
   markdown: {
     lineNumbers: true,
+    anchor:{
+      //(生成有效url的自定义函数)https://github.com/valeriangalliat/markdown-it-anchor#permalinks
+      slugify:s=>encodeURIComponent(String(s).trim()),
+    }
   },
 })
 
@@ -159,8 +163,9 @@ function sidebarSpring() {
       text: 'tx',
       collapsible: true,
       items: [
-        { text: 'ProxyTransactionManagementConfiguration', link: '/spring/tx/ProxyTransactionManagementConfiguration' },
+        { text: 'AbstractFallbackTransactionAttributeSource', link: '/spring/tx/AbstractFallbackTransactionAttributeSource' },
         { text: 'AbstractPlatformTransactionManager', link: '/spring/tx/AbstractPlatformTransactionManager' },
+        { text: 'ProxyTransactionManagementConfiguration', link: '/spring/tx/ProxyTransactionManagementConfiguration' },
         { text: 'TransactionAspectSupport', link: '/spring/tx/TransactionAspectSupport' },
         { text: 'TransactionDefinition', link: '/spring/tx/TransactionDefinition' },
         { text: 'TransactionManagementConfigurationSelector', link: '/spring/tx/TransactionManagementConfigurationSelector' },
@@ -212,6 +217,7 @@ function sidebarNetty() {
         { text: 'EventLoop', link: '/netty/transport/EventLoop' },
         { text: 'EventLoopGroup', link: '/netty/transport/EventLoopGroup' },
         { text: 'NioEventLoop', link: '/netty/transport/NioEventLoop' },
+        { text: 'ServerBootstrap', link: '/netty/transport/ServerBootstrap' },
       ],
     },
   ]

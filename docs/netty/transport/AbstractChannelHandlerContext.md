@@ -1,6 +1,6 @@
 # AbstractChannelHandlerContext
 
-:::tip
+:::tip 注意
 inBound事件从`HeadContext`节点向后传递
 
 outBound事件从`TailContext`节点向前传递

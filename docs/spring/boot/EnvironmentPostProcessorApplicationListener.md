@@ -38,7 +38,7 @@
 
 ### supportsEventType
 
-[AbstractApplicationEventMulticaster](./context/AbstractApplicationEventMulticaster)
+[AbstractApplicationEventMulticaster](../context/AbstractApplicationEventMulticaster)
 
 定义了需要监听的事件即：`ApplicationEnvironmentPreparedEvent`,`ApplicationPreparedEvent`,`ApplicationFailedEvent`
 

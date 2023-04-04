@@ -2,7 +2,7 @@
 
 出自于boot-autoconfugire里的SPI ApplicationContextInitializer
 
-在[prepareContext](./SpringApplication#run)方法里会执行`initialize`方法
+在[SpringApplication的run方法调用了prepareContext](./SpringApplication#run)方法里会执行`initialize`方法
 
 ## 方法
 

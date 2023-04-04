@@ -9,78 +9,78 @@
 在获取事务状态对象的方法里会涉及到开启事务`doBegin`，挂起事务`doSuspend`，恢复事务`doResume`的调用，以上方法均有子类实现
 
 ```java
- @Override
- public final TransactionStatus getTransaction(@Nullable TransactionDefinition definition)
-   throws TransactionException {
+@Override
+public final TransactionStatus getTransaction(@Nullable TransactionDefinition definition)
+    throws TransactionException {
 
-  // Use defaults if no transaction definition given.
-  // 事务属性对象如果事务信息没有 就使用 StaticTransactionDefinition.INSTANCE
-  TransactionDefinition def = (definition != null ? definition : TransactionDefinition.withDefaults());
-  // 获取事务对象 依托于子类去实现 不同类型的事务对象不一样所以是Object类型
-  Object transaction = doGetTransaction();
-  boolean debugEnabled = logger.isDebugEnabled();
-  // isExistingTransaction，默认返回false，同样被具体的事务管理器子类重写
-  // DataSourceTransactionManager的方法将会判断上面获取的DataSourceTransactionObject内部的数据库连接connectionHolder属性是否不null
-  if (isExistingTransaction(transaction)) {
-   // Existing transaction found -> check propagation behavior to find out how to behave.
-   // 如果已经存在事务，那么将检查传播行为并进行不同的处理，随后返回
-   return handleExistingTransaction(def, transaction, debugEnabled);
-  }
+    // Use defaults if no transaction definition given.
+    // 事务属性对象如果事务信息没有 就使用 StaticTransactionDefinition.INSTANCE
+    TransactionDefinition def = (definition != null ? definition : TransactionDefinition.withDefaults());
+    // 获取事务对象 依托于子类去实现 不同类型的事务对象不一样所以是Object类型
+    Object transaction = doGetTransaction();
+    boolean debugEnabled = logger.isDebugEnabled();
+    // isExistingTransaction，默认返回false，同样被具体的事务管理器子类重写
+    // DataSourceTransactionManager的方法将会判断上面获取的DataSourceTransactionObject内部的数据库连接connectionHolder属性是否不null
+    if (isExistingTransaction(transaction)) {
+        // Existing transaction found -> check propagation behavior to find out how to behave.
+        // 如果已经存在事务，那么将检查传播行为并进行不同的处理，随后返回
+        return handleExistingTransaction(def, transaction, debugEnabled);
+    }
 
-  // Check definition settings for new transaction.
-  // 执行到这说明还未开启事务
-  if (def.getTimeout() < TransactionDefinition.TIMEOUT_DEFAULT) {
-   throw new InvalidTimeoutException("Invalid transaction timeout", def.getTimeout());
-  }
- 
-  // No existing transaction found -> check propagation behavior to find out how to proceed.
-  // PROPAGATION_MANDATORY：支持当前事务，如果当前没有事务，就抛出异常
-  // 当前并未开启事务，所以抛出异常
-  if (def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_MANDATORY) {
-   throw new IllegalTransactionStateException(
-     "No existing transaction found for transaction marked with propagation 'mandatory'");
-  }
-  else if (def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRED ||
-    def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRES_NEW ||
-    def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_NESTED) {
-   // 挂起当前事务，这里传null是因为当前没有事务
-   // 仍然调用suspend的意义在于触发 TransactionSynchronization#suspend() 回调  
-   SuspendedResourcesHolder suspendedResources = suspend(null);
-   if (debugEnabled) {
-    logger.debug("Creating new transaction with name [" + def.getName() + "]: " + def);
-   }
-   try {
-    return startTransaction(def, transaction, debugEnabled, suspendedResources);
-   }
-   catch (RuntimeException | Error ex) {
-    // 开启事务异常
-    // 唤醒此前挂起的事务和资源
-    // 当前事务开启失败，所以当前的事务对象为null
-    resume(null, suspendedResources);
-    throw ex;
-   }
-  }
-  else {
-   // Create "empty" transaction: no actual transaction, but potentially synchronization.
-   // PROPAGATION_SUPPORTS  PROPAGATION_NOT_SUPPORTED  PROPAGATION_NEVER
-   // 这三种都不需要以事务运行
-   if (def.getIsolationLevel() != TransactionDefinition.ISOLATION_DEFAULT && logger.isWarnEnabled()) {
-    logger.warn("Custom isolation level specified but no actual transaction initiated; " +
-      "isolation level will effectively be ignored: " + def);
-   }
-   // 是否是全新开启的事务同步机制
-   boolean newSynchronization = (getTransactionSynchronization() == SYNCHRONIZATION_ALWAYS);
-   // 准备事务状态
-   return prepareTransactionStatus(def, null, true, newSynchronization, debugEnabled, null);
-  }
- }
+    // Check definition settings for new transaction.
+    // 执行到这说明还未开启事务
+    if (def.getTimeout() < TransactionDefinition.TIMEOUT_DEFAULT) {
+        throw new InvalidTimeoutException("Invalid transaction timeout", def.getTimeout());
+    }
+
+    // No existing transaction found -> check propagation behavior to find out how to proceed.
+    // PROPAGATION_MANDATORY：支持当前事务，如果当前没有事务，就抛出异常
+    // 当前并未开启事务，所以抛出异常
+    if (def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_MANDATORY) {
+        throw new IllegalTransactionStateException(
+            "No existing transaction found for transaction marked with propagation 'mandatory'");
+    }
+    else if (def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRED ||
+        def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRES_NEW ||
+            def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_NESTED) {
+        // 挂起当前事务，这里传null是因为当前没有事务
+        // 仍然调用suspend的意义在于触发 TransactionSynchronization#suspend() 回调  
+        SuspendedResourcesHolder suspendedResources = suspend(null);
+        if (debugEnabled) {
+              logger.debug("Creating new transaction with name [" + def.getName() + "]: " + def);
+        }
+        try {
+            return startTransaction(def, transaction, debugEnabled, suspendedResources);
+        }
+        catch (RuntimeException | Error ex) {
+            // 开启事务异常
+            // 唤醒此前挂起的事务和资源
+            // 当前事务开启失败，所以当前的事务对象为null
+            resume(null, suspendedResources);
+            throw ex;
+        }
+    }
+    else {
+        // Create "empty" transaction: no actual transaction, but potentially synchronization.
+        // PROPAGATION_SUPPORTS  PROPAGATION_NOT_SUPPORTED  PROPAGATION_NEVER
+        // 这三种都不需要以事务运行
+        if (def.getIsolationLevel() != TransactionDefinition.ISOLATION_DEFAULT && logger.isWarnEnabled()) {
+            logger.warn("Custom isolation level specified but no actual transaction initiated; " +
+                "isolation level will effectively be ignored: " + def);
+        }
+        // 是否是全新开启的事务同步机制
+        boolean newSynchronization = (getTransactionSynchronization() == SYNCHRONIZATION_ALWAYS);
+        // 准备事务状态
+        return prepareTransactionStatus(def, null, true, newSynchronization, debugEnabled, null);
+    }
+}
 ```
 
 ## prepareTransactionStatus
 
 生成TransactionStatus对象
 
-:::tip
+:::tip 注意
 第一个参数： 事务注解信息
 第二个参数： 事务对象
 第三个参数： 是否新建事务
@@ -90,34 +90,34 @@
 :::
 
 ```java
- protected final DefaultTransactionStatus prepareTransactionStatus(
-   TransactionDefinition definition, @Nullable Object transaction, boolean newTransaction,
-   boolean newSynchronization, boolean debug, @Nullable Object suspendedResources) {
+protected final DefaultTransactionStatus prepareTransactionStatus(
+        TransactionDefinition definition, @Nullable Object transaction, boolean newTransaction,
+        boolean newSynchronization, boolean debug, @Nullable Object suspendedResources) {
 
-  DefaultTransactionStatus status = newTransactionStatus(
-    definition, transaction, newTransaction, newSynchronization, debug, suspendedResources);
-  prepareSynchronization(status, definition);
-  return status;
- }
+    DefaultTransactionStatus status = newTransactionStatus(
+            definition, transaction, newTransaction, newSynchronization, debug, suspendedResources);
+    prepareSynchronization(status, definition);
+    return status;
+}
 ```
 
 ## prepareSynchronization
 
 ```java
- protected void prepareSynchronization(DefaultTransactionStatus status, TransactionDefinition definition) {
-  // 开启新的事务同步
-  if (status.isNewSynchronization()) {
-   // 赋值
-   TransactionSynchronizationManager.setActualTransactionActive(status.hasTransaction());
-   TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(
-     definition.getIsolationLevel() != TransactionDefinition.ISOLATION_DEFAULT ?
-       definition.getIsolationLevel() : null);
-   TransactionSynchronizationManager.setCurrentTransactionReadOnly(definition.isReadOnly());
-   TransactionSynchronizationManager.setCurrentTransactionName(definition.getName());
-   // 初始化
-   TransactionSynchronizationManager.initSynchronization();
-  }
- }
+protected void prepareSynchronization(DefaultTransactionStatus status, TransactionDefinition definition) {
+    // 开启新的事务同步
+    if (status.isNewSynchronization()) {
+        // 赋值
+        TransactionSynchronizationManager.setActualTransactionActive(status.hasTransaction());
+        TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(
+          definition.getIsolationLevel() != TransactionDefinition.ISOLATION_DEFAULT ?
+            definition.getIsolationLevel() : null);
+        TransactionSynchronizationManager.setCurrentTransactionReadOnly(definition.isReadOnly());
+        TransactionSynchronizationManager.setCurrentTransactionName(definition.getName());
+        // 初始化
+        TransactionSynchronizationManager.initSynchronization();
+    }
+}
 ```
 
 ## suspend
@@ -125,65 +125,65 @@
 挂起事务
 
 ```java
- /**
-  * Suspend the given transaction. Suspends transaction synchronization first,
-  * then delegates to the {@code doSuspend} template method.
-  * @param transaction the current transaction object
-  * (or {@code null} to just suspend active synchronizations, if any)
-  * @return an object that holds suspended resources
-  * (or {@code null} if neither transaction nor synchronization active)
-  * @see #doSuspend
-  * @see #resume
-  */
- @Nullable
- protected final SuspendedResourcesHolder suspend(@Nullable Object transaction) throws TransactionException {
-  // 获取当前线程注册的事务同步
-  if (TransactionSynchronizationManager.isSynchronizationActive()) {
-   // 回调事务同步的suspend方法 
-   // 同时清空当前线程的事务同步
-   List<TransactionSynchronization> suspendedSynchronizations = doSuspendSynchronization();
-   try {
-    Object suspendedResources = null;
-    // 如果当前事务对象不为空
-    if (transaction != null) {
-     // 执行挂起
-     suspendedResources = doSuspend(transaction);
+/**
+* Suspend the given transaction. Suspends transaction synchronization first,
+* then delegates to the {@code doSuspend} template method.
+* @param transaction the current transaction object
+* (or {@code null} to just suspend active synchronizations, if any)
+* @return an object that holds suspended resources
+* (or {@code null} if neither transaction nor synchronization active)
+* @see #doSuspend
+* @see #resume
+*/
+@Nullable
+protected final SuspendedResourcesHolder suspend(@Nullable Object transaction) throws TransactionException {
+    // 获取当前线程注册的事务同步
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        // 回调事务同步的suspend方法 
+        // 同时清空当前线程的事务同步
+        List<TransactionSynchronization> suspendedSynchronizations = doSuspendSynchronization();
+        try {
+            Object suspendedResources = null;
+            // 如果当前事务对象不为空
+            if (transaction != null) {
+                // 执行挂起
+                suspendedResources = doSuspend(transaction);
+            }
+            // 获取事务名称
+            String name = TransactionSynchronizationManager.getCurrentTransactionName();
+            // 置空当前事务名称
+            TransactionSynchronizationManager.setCurrentTransactionName(null);
+            // 下面以此类推
+            boolean readOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
+            TransactionSynchronizationManager.setCurrentTransactionReadOnly(false);
+            Integer isolationLevel = TransactionSynchronizationManager.getCurrentTransactionIsolationLevel();
+            TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(null);
+            boolean wasActive = TransactionSynchronizationManager.isActualTransactionActive();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+            // 将要悬挂的事务 封装进 SuspendedResourcesHolder
+            return new SuspendedResourcesHolder(
+                suspendedResources, suspendedSynchronizations, name, readOnly, isolationLevel, wasActive);
+        }
+        catch (RuntimeException | Error ex) {
+            // doSuspend failed - original transaction is still active...
+            // doSuspend报异常
+            doResumeSynchronization(suspendedSynchronizations);
+            throw ex;
+        }
     }
-    // 获取事务名称
-    String name = TransactionSynchronizationManager.getCurrentTransactionName();
-    // 置空当前事务名称
-    TransactionSynchronizationManager.setCurrentTransactionName(null);
-    // 下面以此类推
-    boolean readOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
-    TransactionSynchronizationManager.setCurrentTransactionReadOnly(false);
-    Integer isolationLevel = TransactionSynchronizationManager.getCurrentTransactionIsolationLevel();
-    TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(null);
-    boolean wasActive = TransactionSynchronizationManager.isActualTransactionActive();
-    TransactionSynchronizationManager.setActualTransactionActive(false);
-    // 将要悬挂的事务 封装进 SuspendedResourcesHolder
-    return new SuspendedResourcesHolder(
-      suspendedResources, suspendedSynchronizations, name, readOnly, isolationLevel, wasActive);
-   }
-   catch (RuntimeException | Error ex) {
-    // doSuspend failed - original transaction is still active...
-    // doSuspend报异常
-    doResumeSynchronization(suspendedSynchronizations);
-    throw ex;
-   }
-  }
-  else if (transaction != null) {
-   // Transaction active but no synchronization active.
-   // 事务不为空则悬挂当前事务
-   Object suspendedResources = doSuspend(transaction);
-   // 封装进SuspendedResourcesHolder
-   return new SuspendedResourcesHolder(suspendedResources);
-  }
-  else {
-   // 事务对象为空直接返回空
-   // Neither transaction nor synchronization active.
-   return null;
-  }
- }
+    else if (transaction != null) {
+        // Transaction active but no synchronization active.
+        // 事务不为空则悬挂当前事务
+        Object suspendedResources = doSuspend(transaction);
+        // 封装进SuspendedResourcesHolder
+        return new SuspendedResourcesHolder(suspendedResources);
+    }
+    else {
+        // 事务对象为空直接返回空
+        // Neither transaction nor synchronization active.
+        return null;
+    }
+}
 ```
 
 ## doSuspendSynchronization
@@ -193,20 +193,20 @@
 将当前线程的事务同步保存进临时对象清空再返回
 
 ```java
- /**
-  * Suspend all current synchronizations and deactivate transaction
-  * synchronization for the current thread.
-  * @return the List of suspended TransactionSynchronization objects
-  */
- private List<TransactionSynchronization> doSuspendSynchronization() {
-  List<TransactionSynchronization> suspendedSynchronizations =
-    TransactionSynchronizationManager.getSynchronizations();
-  for (TransactionSynchronization synchronization : suspendedSynchronizations) {
-   synchronization.suspend();
-  }
-  TransactionSynchronizationManager.clearSynchronization();
-  return suspendedSynchronizations;
- }
+/**
+* Suspend all current synchronizations and deactivate transaction
+* synchronization for the current thread.
+* @return the List of suspended TransactionSynchronization objects
+*/
+private List<TransactionSynchronization> doSuspendSynchronization() {
+    List<TransactionSynchronization> suspendedSynchronizations =
+        TransactionSynchronizationManager.getSynchronizations();
+    for (TransactionSynchronization synchronization : suspendedSynchronizations) {
+        synchronization.suspend();
+    }
+    TransactionSynchronizationManager.clearSynchronization();
+    return suspendedSynchronizations;
+}
 ```
 
 ## doResumeSynchronization
@@ -216,19 +216,19 @@
 将挂起之前的事务同步列表执行resume再注册进去
 
 ```java
- /**
-  * Reactivate transaction synchronization for the current thread
-  * and resume all given synchronizations.
-  * @param suspendedSynchronizations a List of TransactionSynchronization objects
-  */
- private void doResumeSynchronization(List<TransactionSynchronization> suspendedSynchronizations) {
-  // 
-  TransactionSynchronizationManager.initSynchronization();
-  for (TransactionSynchronization synchronization : suspendedSynchronizations) {
-   synchronization.resume();
-   TransactionSynchronizationManager.registerSynchronization(synchronization);
-  }
- }
+/**
+* Reactivate transaction synchronization for the current thread
+* and resume all given synchronizations.
+* @param suspendedSynchronizations a List of TransactionSynchronization objects
+*/
+private void doResumeSynchronization(List<TransactionSynchronization> suspendedSynchronizations) {
+    // 
+    TransactionSynchronizationManager.initSynchronization();
+    for (TransactionSynchronization synchronization : suspendedSynchronizations) {
+        synchronization.resume();
+        TransactionSynchronizationManager.registerSynchronization(synchronization);
+    }
+}
 ```
 
 ## startTransaction

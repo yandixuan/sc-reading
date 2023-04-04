@@ -6,7 +6,7 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
 }
 ```
 
-:::tip
+:::tip 注意
 实现了`EventExecutor`，对一些方法提供默认实现
 
 继承了`java.util.concurrent.AbstractExecutorService`，拥有了对任务的处理能力

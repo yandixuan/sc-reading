@@ -2,7 +2,7 @@
 
 继承 ImportBeanDefinitionRegistrar 接口 用于注册beanDefinition
 
-:::tip
+:::tip 注意
 
 EnableAspectJAutoProxy 中@import该类
 

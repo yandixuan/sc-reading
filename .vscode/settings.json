@@ -1,6 +1,10 @@
 {
   "cSpell.enabled": false,
   "markdownlint.config": {
+    "MD010":{
+      "ignore_code_languages":[],
+      "spaces_per_tab": 4
+    },
     "MD051": false,
     "MD024": false
   }

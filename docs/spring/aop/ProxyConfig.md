@@ -17,5 +17,4 @@ boolean exposeProxy = false;
 // 标记该配置是否需要被冻结，如果被冻结，将不可以修改增强的配置。
 // 如果该值为true,那么代理对象的生成的各项信息配置完成，则不容许更改，如果ProxyFactory设置完毕，该值为true，则不能对Advice进行改动，可以优化代理对象生成的性能。默认情况下该值为false
 private boolean frozen = false;
-
 ```

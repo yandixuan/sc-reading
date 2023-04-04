@@ -14,7 +14,7 @@
     "upgrade": "pnpm update --interactive --latest"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.38.2",
+    "@antfu/eslint-config": "^0.38.3",
     "eslint": "^8.37.0",
     "eslint-define-config": "^1.17.0",
     "typescript": "^5.0.3",

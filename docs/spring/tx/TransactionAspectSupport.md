@@ -1,145 +1,149 @@
 # TransactionAspectSupport
 
+## 方法
+
+### invokeWithinTransaction
+
 ```java
- @Nullable
- protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
-   final InvocationCallback invocation) throws Throwable {
+@Nullable
+protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
+        final InvocationCallback invocation) throws Throwable {
 
-  // If the transaction attribute is null, the method is non-transactional.
-  // 获取 AnnotationTransactionAttributeSource
-  TransactionAttributeSource tas = getTransactionAttributeSource();
-  // 获取class、mehtod获取@Transactional注解
-  final TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
-  final TransactionManager tm = determineTransactionManager(txAttr);
+    // If the transaction attribute is null, the method is non-transactional.
+    // 获取 AnnotationTransactionAttributeSource
+    TransactionAttributeSource tas = getTransactionAttributeSource();
+    // 获取class、mehtod获取@Transactional注解
+    final TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
+    final TransactionManager tm = determineTransactionManager(txAttr);
 
-  if (this.reactiveAdapterRegistry != null && tm instanceof ReactiveTransactionManager) {
-   boolean isSuspendingFunction = KotlinDetector.isSuspendingFunction(method);
-   boolean hasSuspendingFlowReturnType = isSuspendingFunction &&
-     COROUTINES_FLOW_CLASS_NAME.equals(new MethodParameter(method, -1).getParameterType().getName());
-   if (isSuspendingFunction && !(invocation instanceof CoroutinesInvocationCallback)) {
-    throw new IllegalStateException("Coroutines invocation not supported: " + method);
-   }
-   CoroutinesInvocationCallback corInv = (isSuspendingFunction ? (CoroutinesInvocationCallback) invocation : null);
+    if (this.reactiveAdapterRegistry != null && tm instanceof ReactiveTransactionManager) {
+        boolean isSuspendingFunction = KotlinDetector.isSuspendingFunction(method);
+        boolean hasSuspendingFlowReturnType = isSuspendingFunction &&
+                COROUTINES_FLOW_CLASS_NAME.equals(new MethodParameter(method, -1).getParameterType().getName());
+        if (isSuspendingFunction && !(invocation instanceof CoroutinesInvocationCallback)) {
+            throw new IllegalStateException("Coroutines invocation not supported: " + method);
+        }
+        CoroutinesInvocationCallback corInv = (isSuspendingFunction ? (CoroutinesInvocationCallback) invocation : null);
 
-   ReactiveTransactionSupport txSupport = this.transactionSupportCache.computeIfAbsent(method, key -> {
-    Class<?> reactiveType =
-      (isSuspendingFunction ? (hasSuspendingFlowReturnType ? Flux.class : Mono.class) : method.getReturnType());
-    ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(reactiveType);
-    if (adapter == null) {
-     throw new IllegalStateException("Cannot apply reactive transaction to non-reactive return type: " +
-       method.getReturnType());
+        ReactiveTransactionSupport txSupport = this.transactionSupportCache.computeIfAbsent(method, key -> {
+            Class<?> reactiveType =
+                    (isSuspendingFunction ? (hasSuspendingFlowReturnType ? Flux.class : Mono.class) : method.getReturnType());
+            ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(reactiveType);
+            if (adapter == null) {
+                throw new IllegalStateException("Cannot apply reactive transaction to non-reactive return type: " +
+                        method.getReturnType());
+            }
+            return new ReactiveTransactionSupport(adapter);
+        });
+
+        InvocationCallback callback = invocation;
+        if (corInv != null) {
+            callback = () -> CoroutinesUtils.invokeSuspendingFunction(method, corInv.getTarget(), corInv.getArguments());
+        }
+        Object result = txSupport.invokeWithinTransaction(method, targetClass, callback, txAttr, (ReactiveTransactionManager) tm);
+        if (corInv != null) {
+            Publisher<?> pr = (Publisher<?>) result;
+            return (hasSuspendingFlowReturnType ? KotlinDelegate.asFlow(pr) :
+                    KotlinDelegate.awaitSingleOrNull(pr, corInv.getContinuation()));
+        }
+        return result;
     }
-    return new ReactiveTransactionSupport(adapter);
-   });
 
-   InvocationCallback callback = invocation;
-   if (corInv != null) {
-    callback = () -> CoroutinesUtils.invokeSuspendingFunction(method, corInv.getTarget(), corInv.getArguments());
-   }
-   Object result = txSupport.invokeWithinTransaction(method, targetClass, callback, txAttr, (ReactiveTransactionManager) tm);
-   if (corInv != null) {
-    Publisher<?> pr = (Publisher<?>) result;
-    return (hasSuspendingFlowReturnType ? KotlinDelegate.asFlow(pr) :
-      KotlinDelegate.awaitSingleOrNull(pr, corInv.getContinuation()));
-   }
-   return result;
-  }
+    PlatformTransactionManager ptm = asPlatformTransactionManager(tm);
+    final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
-  PlatformTransactionManager ptm = asPlatformTransactionManager(tm);
-  final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
+    if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager)) {
+        // Standard transaction demarcation with getTransaction and commit/rollback calls.
+        TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
 
-  if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager)) {
-   // Standard transaction demarcation with getTransaction and commit/rollback calls.
-   TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
+        Object retVal;
+        try {
+            // This is an around advice: Invoke the next interceptor in the chain.
+            // This will normally result in a target object being invoked.
+            retVal = invocation.proceedWithInvocation();
+        }
+        catch (Throwable ex) {
+            // target invocation exception
+            completeTransactionAfterThrowing(txInfo, ex);
+            throw ex;
+        }
+        finally {
+            cleanupTransactionInfo(txInfo);
+        }
 
-   Object retVal;
-   try {
-    // This is an around advice: Invoke the next interceptor in the chain.
-    // This will normally result in a target object being invoked.
-    retVal = invocation.proceedWithInvocation();
-   }
-   catch (Throwable ex) {
-    // target invocation exception
-    completeTransactionAfterThrowing(txInfo, ex);
-    throw ex;
-   }
-   finally {
-    cleanupTransactionInfo(txInfo);
-   }
+        if (retVal != null && vavrPresent && VavrDelegate.isVavrTry(retVal)) {
+            // Set rollback-only in case of Vavr failure matching our rollback rules...
+            TransactionStatus status = txInfo.getTransactionStatus();
+            if (status != null && txAttr != null) {
+                retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+            }
+        }
 
-   if (retVal != null && vavrPresent && VavrDelegate.isVavrTry(retVal)) {
-    // Set rollback-only in case of Vavr failure matching our rollback rules...
-    TransactionStatus status = txInfo.getTransactionStatus();
-    if (status != null && txAttr != null) {
-     retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+        commitTransactionAfterReturning(txInfo);
+        return retVal;
     }
-   }
 
-   commitTransactionAfterReturning(txInfo);
-   return retVal;
-  }
+    else {
+        Object result;
+        final ThrowableHolder throwableHolder = new ThrowableHolder();
 
-  else {
-   Object result;
-   final ThrowableHolder throwableHolder = new ThrowableHolder();
+        // It's a CallbackPreferringPlatformTransactionManager: pass a TransactionCallback in.
+        try {
+            result = ((CallbackPreferringPlatformTransactionManager) ptm).execute(txAttr, status -> {
+                TransactionInfo txInfo = prepareTransactionInfo(ptm, txAttr, joinpointIdentification, status);
+                try {
+                    Object retVal = invocation.proceedWithInvocation();
+                    if (retVal != null && vavrPresent && VavrDelegate.isVavrTry(retVal)) {
+                        // Set rollback-only in case of Vavr failure matching our rollback rules...
+                        retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+                    }
+                    return retVal;
+                }
+                catch (Throwable ex) {
+                    if (txAttr.rollbackOn(ex)) {
+                        // A RuntimeException: will lead to a rollback.
+                        if (ex instanceof RuntimeException) {
+                            throw (RuntimeException) ex;
+                        }
+                        else {
+                            throw new ThrowableHolderException(ex);
+                        }
+                    }
+                    else {
+                        // A normal return value: will lead to a commit.
+                        throwableHolder.throwable = ex;
+                        return null;
+                    }
+                }
+                finally {
+                    cleanupTransactionInfo(txInfo);
+                }
+            });
+        }
+        catch (ThrowableHolderException ex) {
+            throw ex.getCause();
+        }
+        catch (TransactionSystemException ex2) {
+            if (throwableHolder.throwable != null) {
+                logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
+                ex2.initApplicationException(throwableHolder.throwable);
+            }
+            throw ex2;
+        }
+        catch (Throwable ex2) {
+            if (throwableHolder.throwable != null) {
+                logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
+            }
+            throw ex2;
+        }
 
-   // It's a CallbackPreferringPlatformTransactionManager: pass a TransactionCallback in.
-   try {
-    result = ((CallbackPreferringPlatformTransactionManager) ptm).execute(txAttr, status -> {
-     TransactionInfo txInfo = prepareTransactionInfo(ptm, txAttr, joinpointIdentification, status);
-     try {
-      Object retVal = invocation.proceedWithInvocation();
-      if (retVal != null && vavrPresent && VavrDelegate.isVavrTry(retVal)) {
-       // Set rollback-only in case of Vavr failure matching our rollback rules...
-       retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
-      }
-      return retVal;
-     }
-     catch (Throwable ex) {
-      if (txAttr.rollbackOn(ex)) {
-       // A RuntimeException: will lead to a rollback.
-       if (ex instanceof RuntimeException) {
-        throw (RuntimeException) ex;
-       }
-       else {
-        throw new ThrowableHolderException(ex);
-       }
-      }
-      else {
-       // A normal return value: will lead to a commit.
-       throwableHolder.throwable = ex;
-       return null;
-      }
-     }
-     finally {
-      cleanupTransactionInfo(txInfo);
-     }
-    });
-   }
-   catch (ThrowableHolderException ex) {
-    throw ex.getCause();
-   }
-   catch (TransactionSystemException ex2) {
-    if (throwableHolder.throwable != null) {
-     logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
-     ex2.initApplicationException(throwableHolder.throwable);
+        // Check result state: It might indicate a Throwable to rethrow.
+        if (throwableHolder.throwable != null) {
+            throw throwableHolder.throwable;
+        }
+        return result;
     }
-    throw ex2;
-   }
-   catch (Throwable ex2) {
-    if (throwableHolder.throwable != null) {
-     logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
-    }
-    throw ex2;
-   }
-
-   // Check result state: It might indicate a Throwable to rethrow.
-   if (throwableHolder.throwable != null) {
-    throw throwableHolder.throwable;
-   }
-   return result;
-  }
- }
+}
 ```
 
 ## completeTransactionAfterThrowing
@@ -204,33 +208,33 @@
 当前事务已经完成了，恢复旧的TransactionInfo与当前事务的绑定
 
 ```java
- /**
-  * Reset the TransactionInfo ThreadLocal.
-  * <p>Call this in all cases: exception or normal return!
-  * @param txInfo information about the current transaction (may be {@code null})
-  */
- protected void cleanupTransactionInfo(@Nullable TransactionInfo txInfo) {
+/**
+* Reset the TransactionInfo ThreadLocal.
+* <p>Call this in all cases: exception or normal return!
+* @param txInfo information about the current transaction (may be {@code null})
+*/
+protected void cleanupTransactionInfo(@Nullable TransactionInfo txInfo) {
   if (txInfo != null) {
-   txInfo.restoreThreadLocalStatus();
+      txInfo.restoreThreadLocalStatus();
   }
- }
+}
 ```
 
 ## commitTransactionAfterReturning
 
 ```java
- /**
-  * Execute after successful completion of call, but not after an exception was handled.
-  * Do nothing if we didn't create a transaction.
-  * @param txInfo information about the current transaction
-  */
- protected void commitTransactionAfterReturning(@Nullable TransactionInfo txInfo) {
-  if (txInfo != null && txInfo.getTransactionStatus() != null) {
-   if (logger.isTraceEnabled()) {
-    logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() + "]");
-   }
-   // 通过事务管理器提交事务
-   txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
-  }
- }
+/**
+* Execute after successful completion of call, but not after an exception was handled.
+* Do nothing if we didn't create a transaction.
+* @param txInfo information about the current transaction
+*/
+protected void commitTransactionAfterReturning(@Nullable TransactionInfo txInfo) {
+    if (txInfo != null && txInfo.getTransactionStatus() != null) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() + "]");
+        }
+        // 通过事务管理器提交事务
+        txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
+    }
+}
 ```
