@@ -3,42 +3,42 @@
 ## 属性
 
 ```java
-// 代理对象
-protected final Object proxy;
+    // 代理对象
+    protected final Object proxy;
 
-// 目标对象
-@Nullable
-protected final Object target;
+    // 目标对象
+    @Nullable
+    protected final Object target;
 
-// 方法
-protected final Method method;
+    // 方法
+    protected final Method method;
 
-// 方法参数
-protected Object[] arguments;
+    // 方法参数
+    protected Object[] arguments;
 
-// 目标对象class类型
-@Nullable
-private final Class<?> targetClass;
+    // 目标对象class类型
+    @Nullable
+    private final Class<?> targetClass;
 
-/**
- * Lazily initialized map of user-specific attributes for this invocation.
- */ 
-@Nullable
-private Map<String, Object> userAttributes;
+    /**
+     * Lazily initialized map of user-specific attributes for this invocation.
+     */ 
+    @Nullable
+    private Map<String, Object> userAttributes;
 
-/**
- * List of MethodInterceptor and InterceptorAndDynamicMethodMatcher
- * that need dynamic checks.
- */
-// 拦截器 
-protected final List<?> interceptorsAndDynamicMethodMatchers;
+    /**
+     * List of MethodInterceptor and InterceptorAndDynamicMethodMatcher
+     * that need dynamic checks.
+     */
+    // 拦截器 
+    protected final List<?> interceptorsAndDynamicMethodMatchers;
 
-/**
- * Index from 0 of the current interceptor we're invoking.
- * -1 until we invoke: then the current interceptor.
- */
-/** 当前已经执行完的拦截器的位置索引，执行完则执行目标方法 */
-private int currentInterceptorIndex = -1;
+    /**
+     * Index from 0 of the current interceptor we're invoking.
+     * -1 until we invoke: then the current interceptor.
+     */
+    /** 当前已经执行完的拦截器的位置索引，执行完则执行目标方法 */
+    private int currentInterceptorIndex = -1;
 ```
 
 ## 构造方法

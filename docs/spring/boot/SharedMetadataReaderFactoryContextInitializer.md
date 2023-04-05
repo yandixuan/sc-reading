@@ -11,9 +11,9 @@
 ```java
 @Override
 public void initialize(ConfigurableApplicationContext applicationContext) {
-  // 在这个地方会塞入 CachingMetadataReaderFactoryPostProcessor这个 BeanFactoryPostProcessor 处理器
-  BeanFactoryPostProcessor postProcessor = new CachingMetadataReaderFactoryPostProcessor(applicationContext);
-  applicationContext.addBeanFactoryPostProcessor(postProcessor);
+    // 在这个地方会塞入 CachingMetadataReaderFactoryPostProcessor这个 BeanFactoryPostProcessor 处理器
+    BeanFactoryPostProcessor postProcessor = new CachingMetadataReaderFactoryPostProcessor(applicationContext);
+    applicationContext.addBeanFactoryPostProcessor(postProcessor);
 }
 ```
 
@@ -26,8 +26,8 @@ public void initialize(ConfigurableApplicationContext applicationContext) {
 ```java
 @Override
 public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
-  register(registry);
-  configureConfigurationClassPostProcessor(registry);
+    register(registry);
+    configureConfigurationClassPostProcessor(registry);
 }
 ```
 
@@ -37,12 +37,12 @@ public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) t
 
 ```java
 private void register(BeanDefinitionRegistry registry) {
-  if (!registry.containsBeanDefinition(BEAN_NAME)) {
-  BeanDefinition definition = BeanDefinitionBuilder
-    .rootBeanDefinition(SharedMetadataReaderFactoryBean.class, SharedMetadataReaderFactoryBean::new)
-    .getBeanDefinition();
-  registry.registerBeanDefinition(BEAN_NAME, definition);
-  }
+    if (!registry.containsBeanDefinition(BEAN_NAME)) {
+        BeanDefinition definition = BeanDefinitionBuilder
+                .rootBeanDefinition(SharedMetadataReaderFactoryBean.class, SharedMetadataReaderFactoryBean::new)
+                .getBeanDefinition();
+        registry.registerBeanDefinition(BEAN_NAME, definition);
+    }
 }
 
 /**
@@ -59,33 +59,33 @@ private void register(BeanDefinitionRegistry registry) {
  * 这几个我们熟知的后置处理器
  */
 private void configureConfigurationClassPostProcessor(BeanDefinitionRegistry registry) {
-  try {
-  configureConfigurationClassPostProcessor(
-    registry.getBeanDefinition(AnnotationConfigUtils.CONFIGURATION_ANNOTATION_PROCESSOR_BEAN_NAME));
-  }
-  catch (NoSuchBeanDefinitionException ex) {
-  }
+    try {
+        configureConfigurationClassPostProcessor(
+                registry.getBeanDefinition(AnnotationConfigUtils.CONFIGURATION_ANNOTATION_PROCESSOR_BEAN_NAME));
+    }
+    catch (NoSuchBeanDefinitionException ex) {
+    }
 }
 
 private void configureConfigurationClassPostProcessor(BeanDefinition definition) {
-  if (definition instanceof AbstractBeanDefinition) {
-  configureConfigurationClassPostProcessor((AbstractBeanDefinition) definition);
-  return;
-  }
-  configureConfigurationClassPostProcessor(definition.getPropertyValues());
+    if (definition instanceof AbstractBeanDefinition) {
+        configureConfigurationClassPostProcessor((AbstractBeanDefinition) definition);
+        return;
+    }
+    configureConfigurationClassPostProcessor(definition.getPropertyValues());
 }
 
 private void configureConfigurationClassPostProcessor(AbstractBeanDefinition definition) {
-  Supplier<?> instanceSupplier = definition.getInstanceSupplier();
-  if (instanceSupplier != null) {
-  definition.setInstanceSupplier(
-    new ConfigurationClassPostProcessorCustomizingSupplier(this.context, instanceSupplier));
-  return;
-  }
-  configureConfigurationClassPostProcessor(definition.getPropertyValues());
+    Supplier<?> instanceSupplier = definition.getInstanceSupplier();
+    if (instanceSupplier != null) {
+        definition.setInstanceSupplier(
+                new ConfigurationClassPostProcessorCustomizingSupplier(this.context, instanceSupplier));
+        return;
+    }
+    configureConfigurationClassPostProcessor(definition.getPropertyValues());
 }
 
 private void configureConfigurationClassPostProcessor(MutablePropertyValues propertyValues) {
-  propertyValues.add("metadataReaderFactory", new RuntimeBeanReference(BEAN_NAME));
+    propertyValues.add("metadataReaderFactory", new RuntimeBeanReference(BEAN_NAME));
 }
 ```

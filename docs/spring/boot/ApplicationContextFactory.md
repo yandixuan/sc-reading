@@ -3,8 +3,8 @@
 函数式接口 ApplicationContextFactory 工厂类
 
 ```java
-// 创建 ConfigurableApplicationContext
-ConfigurableApplicationContext create(WebApplicationType webApplicationType);
+    // 创建 ConfigurableApplicationContext
+    ConfigurableApplicationContext create(WebApplicationType webApplicationType);
 
 ```
 
@@ -20,24 +20,23 @@ org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApp
 
 ```java
 ApplicationContextFactory DEFAULT = (webApplicationType) -> {
-  try {
-   // SpringFactoriesLoader 是存在缓存的 所以直接去取 ApplicationContextFactory的实现类 去生产ApplicationContext
-   for (ApplicationContextFactory candidate : SpringFactoriesLoader
-     .loadFactories(ApplicationContextFactory.class, ApplicationContextFactory.class.getClassLoader())) {
-    ConfigurableApplicationContext context = candidate.create(webApplicationType);
-    if (context != null) {
-     return context;
+    try {
+        // SpringFactoriesLoader 是存在缓存的 所以直接去取 ApplicationContextFactory的实现类 去生产ApplicationContext
+        for (ApplicationContextFactory candidate : SpringFactoriesLoader
+                .loadFactories(ApplicationContextFactory.class, ApplicationContextFactory.class.getClassLoader())) {
+            ConfigurableApplicationContext context = candidate.create(webApplicationType);
+            if (context != null) {
+                return context;
+            }
+        }
+        //  fallback
+        return new AnnotationConfigApplicationContext();
     }
-   }
-   //  fallback
-   return new AnnotationConfigApplicationContext();
-  }
-  catch (Exception ex) {
-   throw new IllegalStateException("Unable create a default ApplicationContext instance, "
-     + "you may need a custom ApplicationContextFactory", ex);
-  }
- };
-
+    catch (Exception ex) {
+        throw new IllegalStateException("Unable create a default ApplicationContext instance, "
+                + "you may need a custom ApplicationContextFactory", ex);
+    }
+};
 ```
 
 ## 方法
@@ -46,10 +45,10 @@ ApplicationContextFactory DEFAULT = (webApplicationType) -> {
 
 ```java
 static ApplicationContextFactory ofContextClass(Class<? extends ConfigurableApplicationContext> contextClass) {
-  return of(() -> BeanUtils.instantiateClass(contextClass));
+    return of(() -> BeanUtils.instantiateClass(contextClass));
 }
 
 static ApplicationContextFactory of(Supplier<ConfigurableApplicationContext> supplier) {
-  return (webApplicationType) -> supplier.get();
+    return (webApplicationType) -> supplier.get();
 }
 ```

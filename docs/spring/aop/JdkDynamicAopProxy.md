@@ -120,7 +120,7 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
             // We need to create a method invocation...
             // 将拦截器统一封装成ReflectiveMethodInvocation
             MethodInvocation invocation =
-              new ReflectiveMethodInvocation(proxy, target, method, args, targetClass, chain);
+                    new ReflectiveMethodInvocation(proxy, target, method, args, targetClass, chain);
             // Proceed to the joinpoint through the interceptor chain.
             // 执行ReflectiveMethodInvocation 的反射方法
             retVal = invocation.proceed();
@@ -133,8 +133,8 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
         // 返回值类型不是 Object 类型
         // 返回值类型就是代理对象的类型
         if (retVal != null && retVal == target &&
-          returnType != Object.class && returnType.isInstance(proxy) &&
-          !RawTargetAccess.class.isAssignableFrom(method.getDeclaringClass())) {
+                returnType != Object.class && returnType.isInstance(proxy) &&
+                !RawTargetAccess.class.isAssignableFrom(method.getDeclaringClass())) {
             // Special case: it returned "this" and the return type of the method
             // is type-compatible. Note that we can't help if the target sets
             // a reference to itself in another returned object.
@@ -144,7 +144,7 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
         // 如果返回值类型为原始类型（基本类型，不能为空）且方法的返回类型不是 Void，如果返回值为空则抛出异常
         else if (retVal == null && returnType != Void.TYPE && returnType.isPrimitive()) {
             throw new AopInvocationException(
-          "Null return value from advice does not match primitive return type for: " + method);
+                    "Null return value from advice does not match primitive return type for: " + method);
         }
         return retVal;
     }

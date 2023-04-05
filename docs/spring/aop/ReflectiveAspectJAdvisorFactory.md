@@ -7,7 +7,7 @@
 ```java
 // 反射过滤掉不是用户定义的方法 桥接方法、合成方法、以及Object的方法
 private static final MethodFilter adviceMethodFilter = ReflectionUtils.USER_DECLARED_METHODS
-   .and(method -> (AnnotationUtils.getAnnotation(method, Pointcut.class) == null));
+        .and(method -> (AnnotationUtils.getAnnotation(method, Pointcut.class) == null));
 // 方法排序比较器
 private static final Comparator<Method> adviceMethodComparator;   
 ```
@@ -35,10 +35,10 @@ static {
     // 转换器会在method搜寻  AbstractAspectJAdvisorFactory.ASPECTJ_ANNOTATION_CLASSES的注解
     Comparator<Method> adviceKindComparator = new ConvertingComparator<>(
         new InstanceComparator<>(
-          Around.class, Before.class, After.class, AfterReturning.class, AfterThrowing.class),
+                Around.class, Before.class, After.class, AfterReturning.class, AfterThrowing.class),
         (Converter<Method, Annotation>) method -> {
-        AspectJAnnotation<?> ann = AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(method);
-        return (ann != null ? ann.getAnnotation() : null);
+            AspectJAnnotation<?> ann = AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(method);
+            return (ann != null ? ann.getAnnotation() : null);
         });
     Comparator<Method> methodNameComparator = new ConvertingComparator<>(Method::getName);
     // 如果 adviceKindComparator  比较结果相等则按方法名称进行比较
@@ -68,7 +68,7 @@ public List<Advisor> getAdvisors(MetadataAwareAspectInstanceFactory aspectInstan
     // 对于同一个lazySingletonAspectInstanceFactory对象没必要创建多次AspectInstance，
     // 所以在lazySingletonAspectInstanceFactory对这方法代理，缓存了AspectInstance实例对象
     MetadataAwareAspectInstanceFactory lazySingletonAspectInstanceFactory =
-        new LazySingletonAspectInstanceFactoryDecorator(aspectInstanceFactory);
+            new LazySingletonAspectInstanceFactoryDecorator(aspectInstanceFactory);
 
     List<Advisor> advisors = new ArrayList<>();
     for (Method method : getAdvisorMethods(aspectClass)) {
@@ -111,14 +111,14 @@ public List<Advisor> getAdvisors(MetadataAwareAspectInstanceFactory aspectInstan
 
 ```java
 private List<Method> getAdvisorMethods(Class<?> aspectClass) {
-  List<Method> methods = new ArrayList<>();
-  // 通过反射aspectClass 拿到 用户定义的方法，并且上面没有@PointCut注解（切点）
-  ReflectionUtils.doWithMethods(aspectClass, methods::add, adviceMethodFilter);
-  if (methods.size() > 1) {
-      // 排序 
-      methods.sort(adviceMethodComparator);
-  }
-  return methods;
+    List<Method> methods = new ArrayList<>();
+    // 通过反射aspectClass 拿到 用户定义的方法，并且上面没有@PointCut注解（切点）
+    ReflectionUtils.doWithMethods(aspectClass, methods::add, adviceMethodFilter);
+    if (methods.size() > 1) {
+        // 排序 
+        methods.sort(adviceMethodComparator);
+    }
+    return methods;
 }
 ```
 
@@ -134,7 +134,7 @@ public Advisor getAdvisor(Method candidateAdviceMethod, MetadataAwareAspectInsta
     // 获取 AspectJExpressionPointcut
     // 表达式的解析是由AspectJ的工具类完成 AspectJExpressionPointcut 判断类是否满足、方法是否满足
     AspectJExpressionPointcut expressionPointcut = getPointcut(
-        candidateAdviceMethod, aspectInstanceFactory.getAspectMetadata().getAspectClass());
+            candidateAdviceMethod, aspectInstanceFactory.getAspectMetadata().getAspectClass());
     if (expressionPointcut == null) {
         return null;
     }
@@ -142,7 +142,7 @@ public Advisor getAdvisor(Method candidateAdviceMethod, MetadataAwareAspectInsta
     // 它是通过注解形式注入的最终的Advisor,这个接口提供了懒加载Advice的策略，所以提供了是否是懒加载以及advice是否被实例化的方法
     // 当要获取advice时 通过getAdvice找到通知方法 这个一动作也拖管给 ReflectiveAspectJAdvisorFactory#getAdvice完成
     return new InstantiationModelAwarePointcutAdvisorImpl(expressionPointcut, candidateAdviceMethod,
-        this, aspectInstanceFactory, declarationOrderInAspect, aspectName);
+            this, aspectInstanceFactory, declarationOrderInAspect, aspectName);
 }
 ```
 
@@ -159,7 +159,7 @@ public Advice getAdvice(Method candidateAdviceMethod, AspectJExpressionPointcut 
     validate(candidateAspectClass);
     // 获取AspectJ注解
     AspectJAnnotation<?> aspectJAnnotation =
-        AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(candidateAdviceMethod);
+            AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(candidateAdviceMethod);
     if (aspectJAnnotation == null) {
         return null;
     }
@@ -169,8 +169,8 @@ public Advice getAdvice(Method candidateAdviceMethod, AspectJExpressionPointcut 
     // class有@Aspect注解 且不是有ajc编译而成
     if (!isAspect(candidateAspectClass)) {
         throw new AopConfigException("Advice must be declared inside an aspect type: " +
-        "Offending method '" + candidateAdviceMethod + "' in class [" +
-        candidateAspectClass.getName() + "]");
+                "Offending method '" + candidateAdviceMethod + "' in class [" +
+                candidateAspectClass.getName() + "]");
     }
 
     if (logger.isDebugEnabled()) {
@@ -188,19 +188,19 @@ public Advice getAdvice(Method candidateAdviceMethod, AspectJExpressionPointcut 
             return null;
         case AtAround:
             springAdvice = new AspectJAroundAdvice(
-                candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
+                    candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
             break;
         case AtBefore:
             springAdvice = new AspectJMethodBeforeAdvice(
-                candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
+                    candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
             break;
         case AtAfter:
             springAdvice = new AspectJAfterAdvice(
-                candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
+                    candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
             break;
         case AtAfterReturning:
             springAdvice = new AspectJAfterReturningAdvice(
-                candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
+                    candidateAdviceMethod, expressionPointcut, aspectInstanceFactory);
             AfterReturning afterReturningAnnotation = (AfterReturning) aspectJAnnotation.getAnnotation();
             if (StringUtils.hasText(afterReturningAnnotation.returning())) {
                 springAdvice.setReturningName(afterReturningAnnotation.returning());
@@ -216,7 +216,7 @@ public Advice getAdvice(Method candidateAdviceMethod, AspectJExpressionPointcut 
             break;
         default:
             throw new UnsupportedOperationException(
-            "Unsupported advice type on method: " + candidateAdviceMethod);
+                    "Unsupported advice type on method: " + candidateAdviceMethod);
     }
 
     // Now to configure the advice...
