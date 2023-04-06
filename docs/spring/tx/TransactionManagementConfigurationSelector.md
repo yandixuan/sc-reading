@@ -17,7 +17,7 @@ protected String[] selectImports(AdviceMode adviceMode) {
         // spring-aop 引入 aop的配置类
         // 引入 ProxyTransactionManagementConfiguration 代理事务配置类
             return new String[] {AutoProxyRegistrar.class.getName(),
-            ProxyTransactionManagementConfiguration.class.getName()};
+                    ProxyTransactionManagementConfiguration.class.getName()};
         case ASPECTJ:
             return new String[] {determineTransactionAspectClass()};
         default:

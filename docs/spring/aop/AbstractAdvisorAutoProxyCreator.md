@@ -21,8 +21,8 @@
 public void setBeanFactory(BeanFactory beanFactory) {
     super.setBeanFactory(beanFactory);
     if (!(beanFactory instanceof ConfigurableListableBeanFactory)) {
-      throw new IllegalArgumentException(
-        "AdvisorAutoProxyCreator requires a ConfigurableListableBeanFactory: " + beanFactory);
+        throw new IllegalArgumentException(
+              "AdvisorAutoProxyCreator requires a ConfigurableListableBeanFactory: " + beanFactory);
     }
     initBeanFactory((ConfigurableListableBeanFactory) beanFactory);
 }
@@ -52,7 +52,7 @@ protected Object[] getAdvicesAndAdvisorsForBean(
     List<Advisor> advisors = findEligibleAdvisors(beanClass, beanName);
     // advisors为空说明不需要代理
     if (advisors.isEmpty()) {
-      return DO_NOT_PROXY;
+        return DO_NOT_PROXY;
     }
     // 返回数组
     return advisors.toArray();
@@ -73,7 +73,7 @@ protected List<Advisor> findEligibleAdvisors(Class<?> beanClass, String beanName
     extendAdvisors(eligibleAdvisors);
     // 不为空,由 `AnnotationAwareOrderComparator`去进行排序
     if (!eligibleAdvisors.isEmpty()) {
-      eligibleAdvisors = sortAdvisors(eligibleAdvisors);
+        eligibleAdvisors = sortAdvisors(eligibleAdvisors);
     }
     return eligibleAdvisors;
 }

@@ -21,7 +21,7 @@ protected <T> T getProperty(String key, Class<T> targetValueType, boolean resolv
         for (PropertySource<?> propertySource : this.propertySources) {
             if (logger.isTraceEnabled()) {
                 logger.trace("Searching for key '" + key + "' in PropertySource '" +
-                    propertySource.getName() + "'");
+                        propertySource.getName() + "'");
             }
             // 根据key从propertySource获取值
             Object value = propertySource.getProperty(key);

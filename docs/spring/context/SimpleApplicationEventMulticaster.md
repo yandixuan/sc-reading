@@ -7,8 +7,8 @@
 ```java
 @Override
 public void multicastEvent(ApplicationEvent event) {
-  // event封装成 可解析类型
-  multicastEvent(event, resolveDefaultEventType(event));
+    // event封装成 可解析类型
+    multicastEvent(event, resolveDefaultEventType(event));
 }
 
 @Override

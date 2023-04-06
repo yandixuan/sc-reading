@@ -5,9 +5,9 @@
 ## 属性
 
 ```java
-// name 应该就是唯一标志
-protected final String name;
+    // name 应该就是唯一标志
+    protected final String name;
 
-// 因为数据源有多种形式可能是Map,properties,yaml文件等 所以使用泛型
-protected final T source;
+    // 因为数据源有多种形式可能是Map,properties,yaml文件等 所以使用泛型
+    protected final T source;
 ```
