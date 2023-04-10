@@ -124,7 +124,7 @@ with a parameter of about 0.5 on average for the default resizing threshold of 0
     transient int modCount;
 ```
 
-## 构造方法
+## 构造函数
 
 ```java
     // 默认构造方法

@@ -2,6 +2,13 @@
 
 ## 宏
 
+## 全局变量
+
+```c
+/* 定义了全局的运行时配置字典，字典类型是 sdsHashDictType */
+dict *configs = NULL; /* Runtime config values */
+```
+
 ## 方法
 
 ### initConfigValues
@@ -35,5 +42,30 @@ void initConfigValues() {
             serverAssert(ret);
         }
     }
+}
+```
+
+### registerConfigValue
+
+向configs字典中添加新的配置项
+
+```c
+/* Create a new config by copying the passed in config. Returns 1 on success
+ * or 0 when their was already a config with the same name.. */
+int registerConfigValue(const char *name, const standardConfig *config, int alias) {
+    /* 分配新的内存空间，并将config内容复制到新的内存空间中 */
+    standardConfig *new = zmalloc(sizeof(standardConfig));
+    memcpy(new, config, sizeof(standardConfig));
+    /* 如果是别名
+     * flags使用二进制位来表示config的类型，所以这里 或操作 ALIAS_CONFIG
+     * 并将config别名作为新的name，将config原始name作为新的alias */
+    if (alias) {
+        new->flags |= ALIAS_CONFIG;
+        new->name = config->alias;
+        new->alias = config->name;
+    }
+    /* 将新的配置项加入字典，使用sds类型的name作为key，new为value 
+     * 如果添加成功，返回DICT_OK */
+    return dictAdd(configs, sdsnew(name), new) == DICT_OK;
 }
 ```

@@ -5,7 +5,6 @@
 ## 头部声明文件
 
 ```c
-
 #ifndef __SDS_H
 #define __SDS_H
 
@@ -23,6 +22,7 @@ typedef char *sds;
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) sdshdr5 {
+    /* sdshdr5直接省掉了len字段， 用高5位存放长度，低3位存放类型 */
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };

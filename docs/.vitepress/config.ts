@@ -21,10 +21,10 @@ export default defineConfig({
   },
   markdown: {
     lineNumbers: true,
-    anchor:{
-      //(生成有效url的自定义函数)https://github.com/valeriangalliat/markdown-it-anchor#permalinks
-      slugify:s=>encodeURIComponent(String(s).trim()),
-    }
+    anchor: {
+      // (生成有效url的自定义函数)https://github.com/valeriangalliat/markdown-it-anchor#permalinks
+      slugify: s => String(s).trim(),
+    },
   },
 })
 
