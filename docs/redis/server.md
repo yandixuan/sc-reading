@@ -1,8 +1,6 @@
-# server
+# server(服务器)
 
-redis-server
-
-## 宏
+## 头文件
 
 ### OBJ
 
@@ -59,6 +57,21 @@ redis-server
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 /* 编码为压缩链表 listpack 的出现是用来代替 ziplist 的 */
 #define OBJ_ENCODING_LISTPACK 11 /* Encoded as a listpack */
+
+/* Redis 在实现上引入了一个LRU时钟来代替unix时间戳，每个对象的每次被访问都会记录下当前服务器的LRU时钟，
+ * 然后用服务器的LRU时钟减去对象本身的时钟，得到的就是这个对象没有被访问的时间间隔（也称空闲时间），空闲时间最大的就是需要淘汰的对象。 */
+
+/* 当使用LRU时，它保存的上次读写的24位unix时间戳(秒级)；使用LFU时，24位会被分为两个部分，16位的分钟级时间戳和8位特殊计数器 */
+#define LRU_BITS 24
+/* LRU时钟最大值 */
+#define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
+/* LRU_CLOCK_RESOLUTION 是指 Least Recently Used (LRU) 算法中的时钟分辨率，
+ * 即指定多长时间内对数据进行一次检查更新。它的作用是控制在缓存容量有限的情况下，如何更好地利用缓存空间的策略。
+ * 通过调整 LRU_CLOCK_RESOLUTION 的值，可以使缓存更加准确地判断哪些数据经常被访问，哪些数据很少被访问。
+ * 较小的 LRU_CLOCK_RESOLUTION 值能够更准确地确定数据的使用频率，但也会导致更多的性能损失，因为缓存需要更频繁地更新。
+ * 较大的 LRU_CLOCK_RESOLUTION 能够减少性能损失，但会降低缓存的准确性，因为缓存可能会错误地保留很少被访问的数据 */
+#define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
+
 ```
 
 ### redisCommandGroup
@@ -215,6 +228,72 @@ struct redisObject {
 
 ## 方法
 
+### ustime
+
+```c
+/* Return the UNIX time in microseconds */
+long long ustime(void) {
+    /*  创建一个 struct timeval 结构体，用于保存当前时间 */
+    struct timeval tv;
+    /*  定义 long long 类型的变量 ust，用于保存当前时间的微秒数 */
+    long long ust;
+    /* 获取当前时间，将获取到的当前时间保存到 tv 结构体中 
+     * tv_sec为Epoch到创建struct timeval时的秒数，tv_usec为额外的微秒精度
+     */
+    gettimeofday(&tv, NULL);
+    /* 秒转微秒 */
+    ust = ((long long)tv.tv_sec)*1000000;
+    /* 相加即可得到精确的时间戳 */
+    ust += tv.tv_usec;
+    /* 返回时间戳 */
+    return ust;
+}
+```
+
+### updateCachedTimeWithUs
+
+```c
+static inline void updateCachedTimeWithUs(int update_daylight_info, const long long ustime) {
+    /* 更新服务器的微秒级时间 */
+    server.ustime = ustime;
+    /*  根据微秒计算服务器的毫秒级时间 */
+    server.mstime = server.ustime / 1000;
+    /*  根据毫秒计算服务器的 Unix 时间（秒级） */
+    time_t unixtime = server.mstime / 1000;
+    /* 因为多个线程同时执行更新 Unix 时间的操作，所以使用原子操作更新服务器的 Unix 时间 */
+    atomicSet(server.unixtime, unixtime);
+
+    /* To get information about daylight saving time, we need to call
+     * localtime_r and cache the result. However calling localtime_r in this
+     * context is safe since we will never fork() while here, in the main
+     * thread. The logging function will call a thread safe version of
+     * localtime that has no locks. */
+    /* 若需要更新夏令时信息 */ 
+    if (update_daylight_info) {
+        struct tm tm;
+        /* 获取服务器unixtime */
+        time_t ut = server.unixtime;
+        /* 获取本地时间的年月日等信息 */
+        localtime_r(&ut,&tm);
+        /* 检查当前是否处于夏令时 */
+        server.daylight_active = tm.tm_isdst;
+    }
+}
+```
+
+### updateCachedTime
+
+更新全局状态(server结构体)中缓存的Unix时间戳
+
+```c
+void updateCachedTime(int update_daylight_info) {
+    /* 获取当前时间微秒时间戳 */
+    const long long us = ustime();
+    /* 更新时间 */
+    updateCachedTimeWithUs(update_daylight_info, us);
+}
+```
+
 ### main
 
 服务端启动的主方法
@@ -307,32 +386,46 @@ void initServerConfig(void) {
     int j;
     /* 绑定的所有IP地址，可以通过参数bind配置多个；CONFIG_BINDADDR_MAX常量为16，即最多绑定16个IP地址 */
     char *default_bindaddr[CONFIG_DEFAULT_BINDADDR_COUNT] = CONFIG_DEFAULT_BINDADDR;
-
+    /* 初始化redis默认的配置字典 */
     initConfigValues();
+    /* 更新服务器时间 */
     updateCachedTime(1);
     server.cmd_time_snapshot = server.mstime;
+    /* 生成一个随机字符串作为服务器的运行ID */
     getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
     changeReplicationId();
     clearReplicationId2();
+    /* 设置serverCron()调用频率 */
     server.hz = CONFIG_DEFAULT_HZ; /* Initialize it ASAP, even if it may get
                                       updated later after loading the config.
                                       This value may be used before the server
                                       is initialized. */
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
+    /* 设置默认配置文件路径 */
     server.configfile = NULL;
     server.executable = NULL;
+    /* 设置服务器的运行架构32位或64位 */
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
+    /* 默认的地址绑定数量 */
     server.bindaddr_count = CONFIG_DEFAULT_BINDADDR_COUNT;
+    /* 将默认的IP地址复制到server.bindaddr数组中，server.bindaddr数组的最大个数是16 */
     for (j = 0; j < CONFIG_DEFAULT_BINDADDR_COUNT; j++)
         server.bindaddr[j] = zstrdup(default_bindaddr[j]);
+    /*  将 server.listeners 数组清空 */
     memset(server.listeners, 0x00, sizeof(server.listeners));
+    /* 激活主动过期删除 */
     server.active_expire_enabled = 1;
+    /* 初始化惰性删除标志，大于0则不会触发 */
     server.lazy_expire_disabled = 0;
+    /* 不跳过校验和验证 */
     server.skip_checksum_validation = 0;
+    /* 数据库未加载 */
     server.loading = 0;
     server.async_loading = 0;
+    /* RDB文件使用的内存量为0 */
     server.loading_rdb_used_mem = 0;
+    /* AOF相关 */
     server.aof_state = AOF_OFF;
     server.aof_rewrite_base_size = 0;
     server.aof_rewrite_scheduled = 0;
@@ -349,17 +442,27 @@ void initServerConfig(void) {
     server.aof_flush_postponed_start = 0;
     server.aof_last_incr_size = 0;
     server.active_defrag_running = 0;
+    /* 未开启事件通知 */
     server.notify_keyspace_events = 0;
+    /* 阻塞的客户端数量为0 */
     server.blocked_clients = 0;
+    /* 将阻塞客户端数组清空 */
     memset(server.blocked_clients_by_type,0,
            sizeof(server.blocked_clients_by_type));
+    /* 不立即关闭服务器 */       
     server.shutdown_asap = 0;
+    /* 关机标志位初始化 */
     server.shutdown_flags = 0;
+    /* 关机时的UNIX时间戳 */
     server.shutdown_mstime = 0;
+    /* 集群模块标志位 */
     server.cluster_module_flags = CLUSTER_MODULE_FLAG_NONE;
     server.migrate_cached_sockets = dictCreate(&migrateCacheDictType);
+    /* 下一个客户端的id号，从1开始计数 */
     server.next_client_id = 1; /* Client IDs, start from 1 .*/
+    /* 获取系统页面大小 */
     server.page_size = sysconf(_SC_PAGESIZE);
+    /* 是否暂停计时器的标识，初始为0，表示不暂停 */
     server.pause_cron = 0;
 
     server.latency_tracking_info_percentiles_len = 3;
@@ -367,16 +470,22 @@ void initServerConfig(void) {
     server.latency_tracking_info_percentiles[0] = 50.0;  /* p50 */
     server.latency_tracking_info_percentiles[1] = 99.0;  /* p99 */
     server.latency_tracking_info_percentiles[2] = 99.9;  /* p999 */
-
+    /* 初始化LRU算法的时钟变量
+     * 获取当前的LRU时钟值 */
     unsigned int lruclock = getLRUClock();
     atomicSet(server.lruclock,lruclock);
+    /* 初始化服务器存储快照的参数 */
     resetServerSaveParams();
 
+    /* 保存快照的条件：1小时内有1个键值对被修改 */
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
+    /* 保存快照的条件：5分钟内有100个键值对被修改 */
     appendServerSaveParams(300,100);  /* save after 5 minutes and 100 changes */
+    /* 保存快照的条件：1分钟内有1万个键值对被修改 */
     appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
 
     /* Replication related */
+    /* 初始化服务器的主从复制相关信息 */
     server.masterhost = NULL;
     server.masterport = 6379;
     server.master = NULL;
@@ -391,10 +500,12 @@ void initServerConfig(void) {
     server.master_repl_offset = 0;
 
     /* Replication partial resync backlog */
+    /* 初始化复制的部分同步缓存 */
     server.repl_backlog = NULL;
     server.repl_no_slaves_since = time(NULL);
 
     /* Failover related */
+    /* 定义故障转移相关的变量 */
     server.failover_end_time = 0;
     server.force_failover = 0;
     server.target_replica_host = NULL;
@@ -402,14 +513,17 @@ void initServerConfig(void) {
     server.failover_state = NO_FAILOVER;
 
     /* Client output buffer limits */
+    /* 定义客户端输出缓冲区限制 */
     for (j = 0; j < CLIENT_TYPE_OBUF_COUNT; j++)
         server.client_obuf_limits[j] = clientBufferLimitsDefaults[j];
-
+    
     /* Linux OOM Score config */
+    /* 定义 Linux OOM Score 相关配置 */
     for (j = 0; j < CONFIG_OOM_COUNT; j++)
         server.oom_score_adj_values[j] = configOOMScoreAdjValuesDefaults[j];
 
     /* Double constants initialization */
+    /*  定义 Double 常量的初始值 */
     R_Zero = 0.0;
     R_PosInf = 1.0/R_Zero;
     R_NegInf = -1.0/R_Zero;
@@ -418,9 +532,11 @@ void initServerConfig(void) {
     /* Command table -- we initialize it here as it is part of the
      * initial configuration, since command names may be changed via
      * redis.conf using the rename-command directive. */
+    /* 定义一个命令字典，并指定使用命令字典的类型 */
     server.commands = dictCreate(&commandTableDictType);
+    /* 定义一个原始命令字典，并指定使用命令字典的类型 */
     server.orig_commands = dictCreate(&commandTableDictType);
-    // 将源码中硬编码的命令列表解析存储到 server.commands 中
+    /*  将源码中硬编码的命令列表解析存储到 server.commands 中 */
     populateCommandTable();
 
     /* Debugging */

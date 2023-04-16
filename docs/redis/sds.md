@@ -1,4 +1,4 @@
-# sds
+# sds(简单动态字符串)
 
 [参考](https://juejin.cn/post/6980974661664407582#heading-7)
 

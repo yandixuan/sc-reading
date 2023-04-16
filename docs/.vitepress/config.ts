@@ -230,6 +230,7 @@ function sidebarRedis() {
       items: [
         { text: 'config', link: '/redis/config' },
         { text: 'dict', link: '/redis/dict' },
+        { text: 'evict', link: '/redis/evict' },
         { text: 'sds', link: '/redis/sds' },
         { text: 'server', link: '/redis/server' },
         { text: 'zmalloc', link: '/redis/zmalloc' },

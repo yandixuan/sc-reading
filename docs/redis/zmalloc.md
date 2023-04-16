@@ -1,12 +1,10 @@
-# zmalloc
-
-内存分配
+# zmalloc(内存分配)
 
 ## 头文件
 
 HAVE_MALLOC_SIZE 如果定义了HAVE_MALLOC_SIZE，也就是申请内存中前几个字节是用于存储申请内存的大小
 
-## 宏定义
+### 宏
 
 ```c
 /*

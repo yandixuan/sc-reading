@@ -1,6 +1,6 @@
 # config
 
-## 宏
+## 头文件
 
 ## 全局变量
 
@@ -33,10 +33,12 @@ void initConfigValues() {
         /* Add the primary config to the dictionary. */
         /* 将主配置值添加到字典中 */
         int ret = registerConfigValue(config->name, config, 0);
+        /* 如果返回OK则什么都不做，否则输出错误信息，及终止程序执行 */
         serverAssert(ret);
 
         /* Aliases are the same as their primary counter parts, but they
          * also have a flag indicating they are the alias. */
+        /* 将配置的别名也注册进配置字典中 */ 
         if (config->alias) {
             int ret = registerConfigValue(config->alias, config, ALIAS_CONFIG);
             serverAssert(ret);
