@@ -2,6 +2,55 @@
 
 ## 头文件
 
+### MAXMEMORY
+
+淘汰策略
+
+```c
+/* Redis maxmemory strategies. Instead of using just incremental number
+ * for this defines, we use a set of flags so that testing for certain
+ * properties common to multiple policies is faster. */
+/* 0001 --> 1
+ * LRU算法 */ 
+#define MAXMEMORY_FLAG_LRU (1<<0)
+/* 0010 --> 2
+ * LFU算法 */
+#define MAXMEMORY_FLAG_LFU (1<<1)
+/* 0100 --> 4
+ * 所有键 */
+#define MAXMEMORY_FLAG_ALLKEYS (1<<2)
+/* 它表示不要与其他进程共享Redis使用的整数对象。如果启用了此选项，
+ * 则Redis将使用大约两倍于默认内存的数量，但可以避免跨进程共享整数对象带来的性能问题。
+ * 在多个Redis实例之间共享内存时，建议启用此选项。 */
+#define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
+    (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
+/* 0000 0000 0001 --> 1
+ * 在设置了过期时间的键，使用近似LRU算法淘汰键 */
+#define MAXMEMORY_VOLATILE_LRU ((0<<8)|MAXMEMORY_FLAG_LRU)
+/* 0001 0000 0010 --> 258
+ * 在设置了过期时间的键，使用近似LFU算法淘汰使用频率比较低的键 */
+#define MAXMEMORY_VOLATILE_LFU ((1<<8)|MAXMEMORY_FLAG_LFU)
+/* 0010 0000 0000 --> 512
+ * 删除最接近到期时间(较小的TTL)的键 */
+#define MAXMEMORY_VOLATILE_TTL (2<<8)
+/* 0011 0000 0000 --> 768
+ * 随机删除设置了过期时间的数据 */
+#define MAXMEMORY_VOLATILE_RANDOM (3<<8)
+/* 0100 0000 0101 --> 1029
+ * 使用近似LRU算法淘汰整个数据库的键 */
+#define MAXMEMORY_ALLKEYS_LRU ((4<<8)|MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_ALLKEYS)
+/* 0101 0000 0110 --> 1286
+ * 使用近似LFU算法淘汰整个数据库的键 */
+#define MAXMEMORY_ALLKEYS_LFU ((5<<8)|MAXMEMORY_FLAG_LFU|MAXMEMORY_FLAG_ALLKEYS)
+/* 0110 0000 0110 --> 1542
+ * 随机回收所有的键 */
+#define MAXMEMORY_ALLKEYS_RANDOM ((6<<8)|MAXMEMORY_FLAG_ALLKEYS)
+/* 0111 0000 0000 --> 1792
+ * 不淘汰任何数据，如果缓存数据超过了maxmemory限定值，并且客户端正在执行的命令(大部分的写入指令，
+ * 但DEL和几个指令例外)会导致内存分配，则向客户端返回错误响应 */
+#define MAXMEMORY_NO_EVICTION (7<<8)
+```
+
 ### OBJ
 
 ```c

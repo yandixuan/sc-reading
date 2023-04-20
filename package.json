@@ -1,11 +1,7 @@
 {
   "name": "sc-reading",
-  "version": "1.0.0",
-  "description": "",
+  "private": "true",
   "author": "ydx",
-  "license": "MIT",
-  "keywords": [],
-  "main": "index.js",
   "scripts": {
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
@@ -14,14 +10,14 @@
     "upgrade": "pnpm update --interactive --latest"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.38.4",
-    "@types/node": "^18.15.11",
+    "@antfu/eslint-config": "^0.38.5",
+    "@types/node": "^18.15.12",
     "eslint": "^8.38.0",
     "eslint-define-config": "^1.18.0",
     "typescript": "^5.0.4",
-    "unocss": "^0.51.4",
-    "vite": "^4.2.1",
-    "vitepress": "1.0.0-alpha.69",
+    "unocss": "^0.51.5",
+    "vite": "^4.3.0",
+    "vitepress": "1.0.0-alpha.73",
     "vue": "^3.2.47"
   }
 }

@@ -128,6 +128,76 @@ struct dictEntry {
 
 ## 方法
 
+### entryIsKey
+
+sds的sdshdr内存字节数基本都是偶数，但是sds的内存指针是buf[]的起始地址，所以sds的内存地址值通常是奇数
+
+通过这个方法判断de的地址是不是指向SDS
+
+```c
+/* Returns 1 if the entry pointer is a pointer to a key, rather than to an
+ * allocated entry. Returns 0 otherwise. */
+/*  */
+static inline int entryIsKey(const dictEntry *de) {
+    return (uintptr_t)(void *)de & 1;
+}
+```
+
+### entryIsNoValue
+
+判断de是否指向的是dictEntryNoValue(无值结构体)节点
+
+```c
+/* Returns 1 if the entry is a special entry with key and next, but without
+ * value. Returns 0 otherwise. */
+static inline int entryIsNoValue(const dictEntry *de) {
+    /* 取低三位bit，如果entry没值则返回true否则false */
+    return ((uintptr_t)(void *)de & ENTRY_PTR_MASK) == ENTRY_PTR_NO_VALUE;
+}
+```
+
+### createEntryNoValue
+
+创建一个没有值的dictEntryNoValue节点，de地址低3位加了`ENTRY_PTR_NO_VALUE`
+
+```c
+/* Creates an entry without a value field. */
+static inline dictEntry *createEntryNoValue(void *key, dictEntry *next) {
+    dictEntryNoValue *entry = zmalloc(sizeof(*entry));
+    entry->key = key;
+    entry->next = next;
+    return (dictEntry *)(void *)((uintptr_t)(void *)entry | ENTRY_PTR_NO_VALUE);
+}
+```
+
+### decodeMaskedPtr
+
+解出`dictEntry`实际地址
+:::danger 注意
+`de` 为 `dictEntry`实际地址 | ENTRY_PTR_NO_VALUE的结果
+
+`~ENTRY_PTR_MASK`相当于`ENTRY_PTR_MASK`进制位上1变0，0变1；再与`de`做`位与运算`消除地址值中低三位的`mask`值，从而得到`dictEntry`的实际地址
+:::
+
+```c
+static inline void *decodeMaskedPtr(const dictEntry *de) {
+    assert(!entryIsKey(de));
+    return (void *)((uintptr_t)(void *)de & ~ENTRY_PTR_MASK);
+}
+```
+
+### decodeEntryNoValue
+
+```c
+/* Decodes the pointer to an entry without value, when you know it is an entry
+ * without value. Hint: Use entryIsNoValue to check. */
+static inline dictEntryNoValue *decodeEntryNoValue(const dictEntry *de) {
+    return decodeMaskedPtr(de);
+}
+
+
+```
+
 ### _dictReset
 
 根据htidx重置哈希表，将其全部元素清空并重置相关的计数器和状态变量
@@ -526,6 +596,70 @@ dictEntry *dictInsertAtPosition(dict *d, void *key, void *position) {
 }
 ```
 
+### dictFind
+
+在给定字典中查找给定键的节点并返回该节点的指针
+
+```c
+dictEntry *dictFind(dict *d, const void *key)
+{
+    dictEntry *he;
+    uint64_t h, idx, table;
+    
+    /* 如果字典是空的则返回NULL */
+    if (dictSize(d) == 0) return NULL; /* dict is empty */
+    /* 如果字典正在rehash，则调用一步rehash加速这个进程的完成 */
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+    /* 根据字段的Hash Function计算出key对应的hash值 */
+    h = dictHashKey(d, key);
+    /* 循环字典的2张hash表 */
+    for (table = 0; table <= 1; table++) {
+        /* 取模得出对应hash表的索引 */
+        idx = h & DICTHT_SIZE_MASK(d->ht_size_exp[table]);
+        /* 获取bucket */
+        he = d->ht_table[table][idx];
+        /* 遍历链表 */
+        while(he) {
+            /* 获取key*/
+            void *he_key = dictGetKey(he);
+            /* 地址相同 或 通过dictCompareKeys函数比对相同则返回 */
+            if (key == he_key || dictCompareKeys(d, key, he_key))
+                /* 返回dictEntry指针 */
+                return he;
+            /* 没找到则遍历下一个next节点 */    
+            he = dictGetNext(he);
+        }
+        /* 如果字典没有处于rehash进程则不用遍历第二张hash表(性能优) */
+        if (!dictIsRehashing(d)) return NULL;
+    }
+    /* 没找到返回NULL */
+    return NULL;
+}
+```
+
+### dictGetKey
+
+字典数据结构中获取字典节点的键
+
+```c
+void *dictGetKey(const dictEntry *de) {
+    if (entryIsKey(de)) return (void*)de;
+    if (entryIsNoValue(de)) return decodeEntryNoValue(de)->key;
+    return de->key;
+}
+```
+
+### dictGetVal
+
+获取dictEntry结构体存储的val
+
+```c
+void *dictGetVal(const dictEntry *de) {
+    assert(entryHasValue(de));
+    return de->v.val;
+}
+```
+
 ### dictGetNext
 
 ```c
@@ -540,74 +674,95 @@ static dictEntry *dictGetNext(const dictEntry *de) {
 }
 ```
 
-### entryIsKey
+### dictGetSomeKeys
 
-sds的sdshdr基本都是偶数，但是sds的内存指针是buf[]的起始地址，所以sds的内存地址值通常是奇数
-
-通过这个方法判断de的地址是不是指向SDS
+随机到dict的一个槽，然后顺序收集n个数据为止
 
 ```c
-/* Returns 1 if the entry pointer is a pointer to a key, rather than to an
- * allocated entry. Returns 0 otherwise. */
-/*  */
-static inline int entryIsKey(const dictEntry *de) {
-    return (uintptr_t)(void *)de & 1;
+unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
+    unsigned long j; /* internal hash table id, 0 or 1. */
+    unsigned long tables; /* 1 or 2 tables? */
+    /* 已经找到的键值对数量，当前哈希表最大索引掩码 */
+    unsigned long stored = 0, maxsizemask;
+    unsigned long maxsteps;
+    /* 当需要的键值对数量大于哈希表大小时，将需要的数量设置为哈希表大小 */
+    if (dictSize(d) < count) count = dictSize(d);
+    /* 最大步数为找到的键值对数量的10倍 */
+    maxsteps = count*10;
+    
+    /* Try to do a rehashing work proportional to 'count'. */
+    /* 如果哈希表正在进行rehash，则先尽可能执行rehash，以便更好地随机取得键值对 */
+    for (j = 0; j < count; j++) {
+        if (dictIsRehashing(d))
+            _dictRehashStep(d);
+        else
+            break;
+    }
+    /* 根据哈希表是否正在进行rehash决定当前哈希表数量 */
+    tables = dictIsRehashing(d) ? 2 : 1;
+    /* 计算当前哈希表中最大的索引掩码 */
+    maxsizemask = DICTHT_SIZE_MASK(d->ht_size_exp[0]);
+    if (tables > 1 && maxsizemask < DICTHT_SIZE_MASK(d->ht_size_exp[1]))
+        maxsizemask = DICTHT_SIZE_MASK(d->ht_size_exp[1]);
+
+    /* Pick a random point inside the larger table. */
+    /* 在当前哈希表中随机选取一个索引作为起点 */
+    unsigned long i = randomULong() & maxsizemask;
+    /* 连续的空桶数量 */
+    unsigned long emptylen = 0; /* Continuous empty entries so far. */
+    /* 两个条件，采集到指定数量样本，或者样本不够，但是查找次数到达上限 */
+    while(stored < count && maxsteps--) {
+        /* 遍历所有哈希表 */
+        for (j = 0; j < tables; j++) {
+            /* Invariant of the dict.c rehashing: up to the indexes already
+             * visited in ht[0] during the rehashing, there are no populated
+             * buckets, so we can skip ht[0] for indexes between 0 and idx-1. */
+            /* 哈希表正在数据迁移，我们在表 1 上采样，如果 i < d->rehashidx，
+             * 说明 i 下标指向的数据已经迁移到表 2 中去了，那么我们到表 2 中进行采样。
+             * 如果 i 下标大于表 2 的大小，那么在表2 中索引将会越界，那么继续在表 1 中
+             * 没有迁移的数据段（ > rehashidx）中查找。*/
+            if (tables == 2 && j == 0 && i < (unsigned long) d->rehashidx) {
+                /* Moreover, if we are currently out of range in the second
+                 * table, there will be no elements in both tables up to
+                 * the current rehashing index, so we jump if possible.
+                 * (this happens when going from big to small table). */
+                if (i >= DICTHT_SIZE(d->ht_size_exp[1]))
+                    i = d->rehashidx;
+                else
+                    continue;
+            }
+            /* 如果下标已经超出了当前表大小，继续遍历下一张表 */
+            if (i >= DICTHT_SIZE(d->ht_size_exp[j])) continue; /* Out of range for this table. */
+            dictEntry *he = d->ht_table[j][i];
+
+            /* Count contiguous empty buckets, and jump to other
+             * locations if they reach 'count' (with a minimum of 5). */
+            if (he == NULL) {
+                emptylen++;
+                /* 如果连续几个桶都是空的，再随机位置进行采样 */
+                if (emptylen >= 5 && emptylen > count) {
+                    i = randomULong() & maxsizemask;
+                    emptylen = 0;
+                }
+            } else {
+                emptylen = 0;
+                while (he) {
+                    /* Collect all the elements of the buckets found non
+                     * empty while iterating. */
+                    /* des传的数组指针 */
+                    *des = he;
+                    des++;
+                    he = dictGetNext(he);
+                    stored++;
+                    if (stored == count) return stored;
+                }
+            }
+        }
+        /* 索引+1 */
+        i = (i+1) & maxsizemask;
+    }
+    return stored;
 }
-```
-
-### entryIsNoValue
-
-判断de是否指向的是dictEntryNoValue(无值结构体)节点
-
-```c
-/* Returns 1 if the entry is a special entry with key and next, but without
- * value. Returns 0 otherwise. */
-static inline int entryIsNoValue(const dictEntry *de) {
-    /* 取低三位bit，如果entry没值则返回true否则false */
-    return ((uintptr_t)(void *)de & ENTRY_PTR_MASK) == ENTRY_PTR_NO_VALUE;
-}
-```
-
-### createEntryNoValue
-
-创建一个没有值的dictEntryNoValue节点，de地址低3位加了`ENTRY_PTR_NO_VALUE`
-
-```c
-/* Creates an entry without a value field. */
-static inline dictEntry *createEntryNoValue(void *key, dictEntry *next) {
-    dictEntryNoValue *entry = zmalloc(sizeof(*entry));
-    entry->key = key;
-    entry->next = next;
-    return (dictEntry *)(void *)((uintptr_t)(void *)entry | ENTRY_PTR_NO_VALUE);
-}
-```
-
-### decodeMaskedPtr
-
-解出`dictEntry`实际地址
-:::danger 注意
-`de` 为 `dictEntry`实际地址 | ENTRY_PTR_NO_VALUE的结果
-
-`~ENTRY_PTR_MASK`相当于`ENTRY_PTR_MASK`进制位上1变0，0变1；再与`de`做`位与运算`消除地址值中低三位的`mask`值，从而得到`dictEntry`的实际地址
-:::
-
-```c
-static inline void *decodeMaskedPtr(const dictEntry *de) {
-    assert(!entryIsKey(de));
-    return (void *)((uintptr_t)(void *)de & ~ENTRY_PTR_MASK);
-}
-```
-
-### decodeEntryNoValue
-
-```c
-/* Decodes the pointer to an entry without value, when you know it is an entry
- * without value. Hint: Use entryIsNoValue to check. */
-static inline dictEntryNoValue *decodeEntryNoValue(const dictEntry *de) {
-    return decodeMaskedPtr(de);
-}
-
-
 ```
 
 ### dictInsertAtPosition
@@ -659,18 +814,6 @@ dictEntry *dictInsertAtPosition(dict *d, void *key, void *position) {
     d->ht_used[htidx]++;
 
     return entry;
-}
-```
-
-### dictGetKey
-
-字典数据结构中获取字典节点的键
-
-```c
-void *dictGetKey(const dictEntry *de) {
-    if (entryIsKey(de)) return (void*)de;
-    if (entryIsNoValue(de)) return decodeEntryNoValue(de)->key;
-    return de->key;
 }
 ```
 
