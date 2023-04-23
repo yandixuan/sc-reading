@@ -443,6 +443,18 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
 }
 ```
 
+### sdsnew
+
+```c
+
+```
+
+### sdsdup
+
+```c
+
+```
+
 ### _sdsMakeRoomFor
 
 ```c
@@ -591,5 +603,177 @@ sds sdsResize(sds s, size_t size, int would_regrow) {
     sdssetalloc(s, size);
     // 返回buf地址指针
     return s;
+}
+```
+
+### sdscatlen
+
+sds字符串连接
+
+:::tip 参数
+
+- 需要被连接的SDS字符串
+- 需要连接的内容起始地址
+- 其内容的长度
+:::
+
+```c
+sds sdscatlen(sds s, const void *t, size_t len) {
+    size_t curlen = sdslen(s);
+
+    s = sdsMakeRoomFor(s,len);
+    if (s == NULL) return NULL;
+    memcpy(s+curlen, t, len);
+    sdssetlen(s, curlen+len);
+    s[curlen+len] = '\0';
+    return s;
+}
+```
+
+### sdssplitargs
+
+将字符串分割，它会默认按\n、空格、\t、\r、0以及双引号和单引号进行分割
+
+```c
+sds *sdssplitargs(const char *line, int *argc) {
+    const char *p = line;
+    /* 申请当前字符串、分割数组指针 */
+    char *current = NULL;
+    char **vector = NULL;
+
+    *argc = 0;
+    while(1) {
+        /* skip blanks */
+        /* 把字符串开头的所有空格都省略掉 */
+        while(*p && isspace(*p)) p++;
+        if (*p) {
+            /* get a token */
+            /* 去除完空格之后，line仍不为空串，开始处理 */
+            /* inq为1说明是双引号字符串 */
+            int inq=0;  /* set to 1 if we are in "quotes" */
+            /* insq为1说明是单引号字符串 */
+            int insq=0; /* set to 1 if we are in 'single quotes' */
+            int done=0;
+            /* 如果current指向NULL,则将current指向一个新的空SDS对象 */
+            if (current == NULL) current = sdsempty();
+            while(!done) {
+                /* 进入了双引号区域 */
+                if (inq) {
+                    /* 如果是\\xa5 类似的格式，那么必定是不可见字符的ascii值 */
+                    if (*p == '\\' && *(p+1) == 'x' &&
+                                             is_hex_digit(*(p+2)) &&
+                                             is_hex_digit(*(p+3)))
+                    {
+                        unsigned char byte;
+                        /* 获取ascii值 */
+                        byte = (hex_digit_to_int(*(p+2))*16)+
+                                hex_digit_to_int(*(p+3));
+                        /* 转化成字符 拼接到 当前参数字符串 */        
+                        current = sdscatlen(current,(char*)&byte,1);
+                        /* 跳过3个字符 */
+                        p += 3;
+                      /* 如果是转义符的其它情况，那么再向后获一个 */  
+                    } else if (*p == '\\' && *(p+1)) {
+                        char c;
+                        /* 跳过1个字符 */
+                        p++;
+                        switch(*p) {
+                        case 'n': c = '\n'; break;
+                        case 'r': c = '\r'; break;
+                        case 't': c = '\t'; break;
+                        case 'b': c = '\b'; break;
+                        case 'a': c = '\a'; break;
+                        default: c = *p; break;
+                        }
+                        /* 将这个转义字符拼接到当前参数字符串中 */
+                        current = sdscatlen(current,&c,1);
+                    } else if (*p == '"') {
+                        /* closing quote must be followed by a space or
+                         * nothing at all. */
+                        /* 关闭的引号后面必须为空字符或者没有任何东西(即已经结束)，否则跳转到错误语句 */ 
+                        if (*(p+1) && !isspace(*(p+1))) goto err;
+                        /* 如果这个参数是正常的，那么到了关闭引号这里就是结束了，意味着一个参数字符串完成了 */
+                        done=1;
+                    } else if (!*p) {
+                        /* unterminated quotes */
+                        /* !*p 表示已经结尾了，但是还没有找到结尾引号，所以需要错误处理 */
+                        goto err;
+                    } else {
+                        /* 其他情况，正常拼接一个字符 */
+                        current = sdscatlen(current,p,1);
+                    }
+                  /* 进入了单引号区域 */  
+                } else if (insq) {
+                    if (*p == '\\' && *(p+1) == '\'') {
+                        p++;
+                        /* 拼接单引号 */
+                        current = sdscatlen(current,"'",1);
+                    } else if (*p == '\'') {
+                        /* closing quote must be followed by a space or
+                         * nothing at all. */
+                        /* 这里同双引号部分的逻辑 */ 
+                        if (*(p+1) && !isspace(*(p+1))) goto err;
+                        done=1;
+                    } else if (!*p) {
+                        /* unterminated quotes */
+                        goto err;
+                    } else {
+                        current = sdscatlen(current,p,1);
+                    }
+                } else {
+                    switch(*p) {
+                    /* 碰到，空格、换行符、回车符、制表符、空字节符，推入数组 */
+                    case ' ':
+                    case '\n':
+                    case '\r':
+                    case '\t':
+                    case '\0':
+                        done=1;
+                        break;
+                    /*  */    
+                    case '"':
+                        inq=1;
+                        break;
+                    /*  */    
+                    case '\'':
+                        insq=1;
+                        break;
+                    default:
+                        current = sdscatlen(current,p,1);
+                        break;
+                    }
+                }
+                /* 指针移到下个字符串 */
+                if (*p) p++;
+            }
+            /* add the token to the vector */
+            /* 分配指向参数字符串的字符串指针数组（vector存的是SDS地址指针） */
+            vector = s_realloc(vector,((*argc)+1)*sizeof(char*));
+            /* 将当前获取的参数字符串存储到相应位置 */
+            vector[*argc] = current;
+            /* 返回参数的个数+1 */
+            (*argc)++;
+            /* 一个已经完成，将当前指针清空，获取下一个参数字符串 */
+            current = NULL;
+        } else {
+            /* Even on empty input string return something not NULL. */
+            /* 即使是空的输入字符串 也返回空的数组 */
+            if (vector == NULL) vector = s_malloc(sizeof(void*));
+            /* 已经到结尾，返回所有的参数字符串 */ 
+            return vector;
+        }
+    }
+
+err:
+    while((*argc)--)
+        /* 挨个释放内存空间 */
+        sdsfree(vector[*argc]);
+    /* 释放指针数组的内存空间 */    
+    s_free(vector);
+    /* 释放当前参数字符串的内存空间 */
+    if (current) sdsfree(current);
+    /* 参数各位设置为0 */
+    *argc = 0;
+    return NULL;
 }
 ```

@@ -229,6 +229,7 @@ function sidebarRedis() {
       collapsible: true,
       items: [
         { text: 'config', link: '/redis/config' },
+        { text: 'connection', link: '/redis/connection' },
         { text: 'dict', link: '/redis/dict' },
         { text: 'evict', link: '/redis/evict' },
         { text: 'sds', link: '/redis/sds' },

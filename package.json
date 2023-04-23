@@ -11,12 +11,12 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^0.38.5",
-    "@types/node": "^18.15.12",
-    "eslint": "^8.38.0",
+    "@types/node": "^18.16.0",
+    "eslint": "^8.39.0",
     "eslint-define-config": "^1.18.0",
     "typescript": "^5.0.4",
-    "unocss": "^0.51.5",
-    "vite": "^4.3.0",
+    "unocss": "^0.51.6",
+    "vite": "^4.3.1",
     "vitepress": "1.0.0-alpha.73",
     "vue": "^3.2.47"
   }
