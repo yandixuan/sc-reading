@@ -228,6 +228,8 @@ function sidebarRedis() {
     {
       collapsible: true,
       items: [
+        { text: 'adlist', link: '/redis/adlist' },
+        { text: 'ae', link: '/redis/ae' },
         { text: 'config', link: '/redis/config' },
         { text: 'connection', link: '/redis/connection' },
         { text: 'dict', link: '/redis/dict' },

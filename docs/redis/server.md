@@ -352,7 +352,7 @@ void updateCachedTime(int update_daylight_info) {
 
 ### initServerConfig
 
-初始化服务器状态结构
+初始化服务器状态结构体
 
 ```c
 void initServerConfig(void) {
@@ -519,6 +519,350 @@ void initServerConfig(void) {
 }
 ```
 
+### adjustOpenFilesLimit
+
+检查系统对于Redis进程的打开文件数限制，如果系统限制过低，则尝试将Redis进程的文件打开数限制增加到一个更高的值
+
+```c
+void adjustOpenFilesLimit(void) {
+    /* rlim_t是无符号整数类型
+     * server.maxclients 是服务器程序运行时能处理的最大客户端连接数（默认10000）
+     * CONFIG_MIN_RESERVED_FDS = 32 （redis持久化、侦听套接字、日志文件等额外操作保留的文件描述符数） */
+    rlim_t maxfiles = server.maxclients+CONFIG_MIN_RESERVED_FDS;
+    struct rlimit limit;
+    
+    /* getrlimit是一个系统调用，返回rlim_cur，rlim_max
+     * rlim_cur是进程资源的实际限制，rlim_max是rlim_cur限制的上限
+     * RLIMIT_NOFILE(一个进程能打开的最大文件数，内核默认是1024) */
+    if (getrlimit(RLIMIT_NOFILE,&limit) == -1) {
+        /* 获取失败 */
+        serverLog(LL_WARNING,"Unable to obtain the current NOFILE limit (%s), assuming 1024 and setting the max clients configuration accordingly.",
+            strerror(errno));
+        /* maxclients被设置为 1024-32 */    
+        server.maxclients = 1024-CONFIG_MIN_RESERVED_FDS;
+    } else {
+        /* 保存下来当前获取到的限制数 */
+        rlim_t oldlimit = limit.rlim_cur;
+
+        /* Set the max number of files if the current limit is not enough
+         * for our needs. */
+        /* redis所需要的fd数量超过了获取到的限制数 */ 
+        if (oldlimit < maxfiles) {
+            rlim_t bestlimit;
+            int setrlimit_error = 0;
+
+            /* Try to set the file limit to match 'maxfiles' or at least
+             * to the higher value supported less than maxfiles. */
+            /* 先设置bestlimit为redis所需要的fd数量 */ 
+            bestlimit = maxfiles;
+            while(bestlimit > oldlimit) {
+                /* 每次循环将redis所需要的fd数量减16 */
+                rlim_t decr_step = 16;
+
+                limit.rlim_cur = bestlimit;
+                limit.rlim_max = bestlimit;
+                /* 通过系统调用，去重新设置限制数，设置成功跳出while循环
+                 * 如果失败则尝试递减bestlimit */
+                if (setrlimit(RLIMIT_NOFILE,&limit) != -1) break;
+                setrlimit_error = errno;
+
+                /* We failed to set file limit to 'bestlimit'. Try with a
+                 * smaller limit decrementing by a few FDs per iteration. */
+                /* 如果redis所需要的fd数量比16还小了 */ 
+                if (bestlimit < decr_step) {
+                    /* 将redis所需要的fd数量设置为最初我们拿到的限制数并跳出while循环 */
+                    bestlimit = oldlimit;
+                    break;
+                }
+                bestlimit -= decr_step;
+            }
+
+            /* Assume that the limit we get initially is still valid if
+             * our last try was even lower. */
+            /* 当前的redis所需要的fd数量比最开始拿到的限制数还小，还是用之前的限制数吧 */ 
+            if (bestlimit < oldlimit) bestlimit = oldlimit;
+            
+            /* 已经处理过的redis所需要的fd数量比最开始的redis所需要的fd数量小 */
+            if (bestlimit < maxfiles) {
+                unsigned int old_maxclients = server.maxclients;
+                /* 设置maxclients */
+                server.maxclients = bestlimit-CONFIG_MIN_RESERVED_FDS;
+                /* maxclients is unsigned so may overflow: in order
+                 * to check if maxclients is now logically less than 1
+                 * we test indirectly via bestlimit. */
+                /* 如果redis所需要的fd数量小于等于32（还要预留32），直接挂掉！ */ 
+                if (bestlimit <= CONFIG_MIN_RESERVED_FDS) {
+                    serverLog(LL_WARNING,"Your current 'ulimit -n' "
+                        "of %llu is not enough for the server to start. "
+                        "Please increase your open file limit to at least "
+                        "%llu. Exiting.",
+                        (unsigned long long) oldlimit,
+                        (unsigned long long) maxfiles);
+                    exit(1);
+                }
+                serverLog(LL_WARNING,"You requested maxclients of %d "
+                    "requiring at least %llu max file descriptors.",
+                    old_maxclients,
+                    (unsigned long long) maxfiles);
+                serverLog(LL_WARNING,"Server can't set maximum open files "
+                    "to %llu because of OS error: %s.",
+                    (unsigned long long) maxfiles, strerror(setrlimit_error));
+                serverLog(LL_WARNING,"Current maximum open files is %llu. "
+                    "maxclients has been reduced to %d to compensate for "
+                    "low ulimit. "
+                    "If you need higher maxclients increase 'ulimit -n'.",
+                    (unsigned long long) bestlimit, server.maxclients);
+            } else {
+                serverLog(LL_NOTICE,"Increased maximum number of open files "
+                    "to %llu (it was originally set to %llu).",
+                    (unsigned long long) maxfiles,
+                    (unsigned long long) oldlimit);
+            }
+        }
+    }
+}
+```
+
+### initServer
+
+:::tip
+
+1. 初始化服务器状态结构体server的各个字段，如各个数据库的状态结构体、命令表、统计信息等；
+2. 设置服务器的各种默认参数值，如最大客户端数量、默认的最大内存限制等；
+3. 初始化随机数生成器，以便后续使用；
+4. 读取系统的配置参数，包括最大打开文件数量限制等；
+5. 设置崩溃处理函数，以便程序发生错误时能够及时处理；
+6. 初始化慢查询日志；
+7. 加载用户自定义的扩展命令；
+8. 初始化事件循环机制。
+:::
+
+[参考](https://zhuanlan.zhihu.com/p/620557148)
+
+```c
+void initServer(void) {
+    int j;
+    /* Redis服务器接收到SIGHUP信号时，它不会做任何事情。 */
+    signal(SIGHUP, SIG_IGN);
+    /* 忽略对于管道/套接字等读取端已经关闭的写入操作而产生的SIGPIPE信号 */
+    signal(SIGPIPE, SIG_IGN);
+    /* 信号处理 */
+    setupSignalHandlers();
+    /* 当前线程标记为可被取消的状态 */
+    makeThreadKillable();
+
+    if (server.syslog_enabled) {
+        openlog(server.syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
+            server.syslog_facility);
+    }
+
+    /* Initialization after setting defaults from the config system. */
+    /* 标志是否启用 AOF（Append Only File）持久化，初始化为启用或禁用状态 */
+    server.aof_state = server.aof_enabled ? AOF_ON : AOF_OFF;
+    server.fsynced_reploff = server.aof_enabled ? 0 : -1;
+    /* 服务器的运行频率，即每秒执行的事件循环次数 */
+    server.hz = server.config_hz;
+    server.pid = getpid();
+    /* 标记当前进程是否为子进程，初始为 NONE */
+    server.in_fork_child = CHILD_TYPE_NONE;
+    /* Redis 服务器的主线程 ID */
+    server.main_thread_id = pthread_self();
+    /* 当前客户端，初始为 NULL */
+    server.current_client = NULL;
+    server.errors = raxNew();
+    server.execution_nesting = 0;
+    /* 存储所有已连接的客户端 */
+    server.clients = listCreate();
+    /* 用于快速查找客户端 */
+    server.clients_index = raxNew();
+    /* 存储待关闭的客户端 */
+    server.clients_to_close = listCreate();
+    /* 存储所有从服务器 */
+    server.slaves = listCreate();
+    /* 存储所有 MONITOR 客户端 */
+    server.monitors = listCreate();
+    /* 存储需要写入数据的客户端 */
+    server.clients_pending_write = listCreate();
+    /* 待处理的客户端的请求数据队列（需要进行协议解析等操作） */
+    server.clients_pending_read = listCreate();
+    /* 存储客户端的超时时间 */
+    server.clients_timeout_table = raxNew();
+    server.replication_allowed = 1;
+    server.slaveseldb = -1; /* Force to emit the first SELECT command. */
+    server.unblocked_clients = listCreate();
+    server.ready_keys = listCreate();
+    server.tracking_pending_keys = listCreate();
+    server.clients_waiting_acks = listCreate();
+    server.get_ack_from_slaves = 0;
+    server.paused_actions = 0;
+    memset(server.client_pause_per_purpose, 0,
+           sizeof(server.client_pause_per_purpose));
+    server.postponed_clients = listCreate();
+    server.events_processed_while_blocked = 0;
+    server.system_memory_size = zmalloc_get_memory_size();
+    server.blocked_last_cron = 0;
+    server.blocking_op_nesting = 0;
+    server.thp_enabled = 0;
+    server.cluster_drop_packet_filter = -1;
+    server.reply_buffer_peak_reset_time = REPLY_BUFFER_DEFAULT_PEAK_RESET_TIME;
+    server.reply_buffer_resizing_enabled = 1;
+    server.client_mem_usage_buckets = NULL;
+    /* 重置服务器缓冲区 */
+    resetReplicationBuffer();
+
+    /* Make sure the locale is set on startup based on the config file. */
+    if (setlocale(LC_COLLATE,server.locale_collate) == NULL) {
+        serverLog(LL_WARNING, "Failed to configure LOCALE for invalid locale name.");
+        exit(1);
+    }
+    /* 创建共享对象（可以减少内存占用和提高性能） */
+    createSharedObjects();
+    /* 调整文件描述符限制 */
+    adjustOpenFilesLimit();
+    const char *clk_msg = monotonicInit();
+    serverLog(LL_NOTICE, "monotonic clock: %s", clk_msg);
+    /* 创建事件循环对象 */
+    server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
+    if (server.el == NULL) {
+        serverLog(LL_WARNING,
+            "Failed creating the event loop. Error message: '%s'",
+            strerror(errno));
+        exit(1);
+    }
+    /* 为redis的db分配内存（默认16个db） */
+    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+
+    /* Create the Redis databases, and initialize other internal state. */
+    for (j = 0; j < server.dbnum; j++) {
+        server.db[j].dict = dictCreate(&dbDictType);
+        server.db[j].expires = dictCreate(&dbExpiresDictType);
+        server.db[j].expires_cursor = 0;
+        server.db[j].blocking_keys = dictCreate(&keylistDictType);
+        server.db[j].blocking_keys_unblock_on_nokey = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].watched_keys = dictCreate(&keylistDictType);
+        server.db[j].id = j;
+        server.db[j].avg_ttl = 0;
+        server.db[j].defrag_later = listCreate();
+        server.db[j].slots_to_keys = NULL; /* Set by clusterInit later on if necessary. */
+        listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
+    }
+    evictionPoolAlloc(); /* Initialize the LRU keys pool. */
+    server.pubsub_channels = dictCreate(&keylistDictType);
+    server.pubsub_patterns = dictCreate(&keylistDictType);
+    server.pubsubshard_channels = dictCreate(&keylistDictType);
+    server.cronloops = 0;
+    server.in_exec = 0;
+    server.busy_module_yield_flags = BUSY_MODULE_YIELD_NONE;
+    server.busy_module_yield_reply = NULL;
+    server.client_pause_in_transaction = 0;
+    server.child_pid = -1;
+    server.child_type = CHILD_TYPE_NONE;
+    server.rdb_child_type = RDB_CHILD_TYPE_NONE;
+    server.rdb_pipe_conns = NULL;
+    server.rdb_pipe_numconns = 0;
+    server.rdb_pipe_numconns_writing = 0;
+    server.rdb_pipe_buff = NULL;
+    server.rdb_pipe_bufflen = 0;
+    server.rdb_bgsave_scheduled = 0;
+    server.child_info_pipe[0] = -1;
+    server.child_info_pipe[1] = -1;
+    server.child_info_nread = 0;
+    server.aof_buf = sdsempty();
+    server.lastsave = time(NULL); /* At startup we consider the DB saved. */
+    server.lastbgsave_try = 0;    /* At startup we never tried to BGSAVE. */
+    server.rdb_save_time_last = -1;
+    server.rdb_save_time_start = -1;
+    server.rdb_last_load_keys_expired = 0;
+    server.rdb_last_load_keys_loaded = 0;
+    server.dirty = 0;
+    resetServerStats();
+    /* A few stats we don't want to reset: server startup time, and peak mem. */
+    server.stat_starttime = time(NULL);
+    server.stat_peak_memory = 0;
+    server.stat_current_cow_peak = 0;
+    server.stat_current_cow_bytes = 0;
+    server.stat_current_cow_updated = 0;
+    server.stat_current_save_keys_processed = 0;
+    server.stat_current_save_keys_total = 0;
+    server.stat_rdb_cow_bytes = 0;
+    server.stat_aof_cow_bytes = 0;
+    server.stat_module_cow_bytes = 0;
+    server.stat_module_progress = 0;
+    for (int j = 0; j < CLIENT_TYPE_COUNT; j++)
+        server.stat_clients_type_memory[j] = 0;
+    server.stat_cluster_links_memory = 0;
+    server.cron_malloc_stats.zmalloc_used = 0;
+    server.cron_malloc_stats.process_rss = 0;
+    server.cron_malloc_stats.allocator_allocated = 0;
+    server.cron_malloc_stats.allocator_active = 0;
+    server.cron_malloc_stats.allocator_resident = 0;
+    server.lastbgsave_status = C_OK;
+    server.aof_last_write_status = C_OK;
+    server.aof_last_write_errno = 0;
+    server.repl_good_slaves_count = 0;
+    server.last_sig_received = 0;
+
+    /* Initiate acl info struct */
+    server.acl_info.invalid_cmd_accesses = 0;
+    server.acl_info.invalid_key_accesses  = 0;
+    server.acl_info.user_auth_failures = 0;
+    server.acl_info.invalid_channel_accesses = 0;
+
+    /* Create the timer callback, this is our way to process many background
+     * operations incrementally, like clients timeout, eviction of unaccessed
+     * expired keys and so forth. */
+    /* 创建一个时间事件，执行函数为 serverCron，
+     * 这是我们增量处理许多后台操作的方法，比如客户端超时，清除未访问的过期键等等. */ 
+    if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
+        serverPanic("Can't create event loop timers.");
+        exit(1);
+    }
+
+    /* Register a readable event for the pipe used to awake the event loop
+     * from module threads. */
+    /* 注册一个可读事件，用于在模块中阻塞的客户端需要注意时唤醒事件循环 */ 
+    if (aeCreateFileEvent(server.el, server.module_pipe[0], AE_READABLE,
+        modulePipeReadable,NULL) == AE_ERR) {
+            serverPanic(
+                "Error registering the readable event for the module pipe.");
+    }
+
+    /* Register before and after sleep handlers (note this needs to be done
+     * before loading persistence since it is used by processEventsWhileBlocked. */
+    /* 注册事件驱动框架的钩子函数，事件循环器在每次阻塞前后都会调用钩子函数 */ 
+    aeSetBeforeSleepProc(server.el,beforeSleep);
+    aeSetAfterSleepProc(server.el,afterSleep);
+
+    /* 32 bit instances are limited to 4GB of address space, so if there is
+     * no explicit limit in the user provided configuration we set a limit
+     * at 3 GB using maxmemory with 'noeviction' policy'. This avoids
+     * useless crashes of the Redis instance for out of memory. */
+    /* 如果 Redis 运行在 32 位操作系统上，由于 32 位操作系统内存空间限制为 4GB，所以将 Redis 使用内存限制为 3GB，避免 Redis 服务器因内存不足而崩溃。. */
+    if (server.arch_bits == 32 && server.maxmemory == 0) {
+        serverLog(LL_WARNING,"Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
+        server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
+        server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
+    }
+
+    /* 初始化LUA机制 */
+    scriptingInit(1);
+    functionsInit();
+    /* 初始化慢日志机制 */
+    slowlogInit();
+    /* 初始化延迟监控机制 */
+    latencyMonitorInit();
+
+    /* Initialize ACL default password if it exists */
+    ACLUpdateDefaultUserPassword(server.requirepass);
+
+    applyWatchdogPeriod();
+
+    if (server.maxmemory_clients != 0)
+        initServerClientMemUsageBuckets();
+}
+```
+
 ### populateCommandTable
 
 从commands.c中的静态表格中填充Redis命令表dict，该静态表格是从commands文件夹中的json文件自动生成的。
@@ -552,6 +896,67 @@ void populateCommandTable(void) {
         /* 断言两个添加操作成功 */
         serverAssert(retval1 == DICT_OK && retval2 == DICT_OK);
     }
+}
+```
+
+### setupSignalHandlers
+
+[参考](https://www.cnblogs.com/lidabo/p/14040946.html)
+
+[sigaction](https://blog.csdn.net/u013318019/article/details/124957666)
+
+```c
+struct sigaction {
+    /* 信号处理器函数的地址 */
+    void (*sa_handler)(int);
+    void (*sa_sigaction)(int, siginfo_t *, void *);
+    /* 定义一组信号，在调用由sa_handler所定义的处理器程序时将阻塞该组信号，不允许它们中断此处理器程序的执行。 */
+    sigset_t sa_mask;
+    /* 用于控制信号行为 */
+    int sa_flags;
+    /* 己弃用 */
+    void (*sa_restorer)(void);
+};
+```
+
+```c
+void setupSignalHandlers(void) {
+    struct sigaction act;
+
+    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
+     * Otherwise, sa_handler is used. */
+    /* 信号集初始化为空
+     * sa_mask指定在信号处理程序执行过程当中，哪些信号应当被阻塞。
+     * 缺省状况下当前信号自己被阻塞，防止信号的嵌套发送 */ 
+    sigemptyset(&act.sa_mask);
+    /* 当其设置为0时，表示使用默认属性，也就是先不响应该信号，而是执行完回调函数再处理此信号 */
+    act.sa_flags = 0;
+    /* 指定信号捕捉后的关闭处理函数 */
+    act.sa_handler = sigShutdownHandler;
+    /* 处理 SIGTERM、SIGHUP信号  */
+    sigaction(SIGTERM, &act, NULL);
+    sigaction(SIGINT, &act, NULL);
+
+    /* 信号集初始化为空 */
+    sigemptyset(&act.sa_mask);
+    /* SA_NODEFER：信号处理程序在执行期间不应阻塞同一信号，即信号处理程序可以再次接收该信号并立即处理，而不必等待当前信号处理结束。
+     *
+     * SA_RESETHAND：信号处理函数执行完毕之后重置该信号的处理方式为默认方式。
+     * 也就是说，如果使用SA_RESETHAND标志，处理函数只会被执行一次，然后信号的处理方式就会被重置为默认方式，不再执行信号处理函数。
+     *
+     * SA_SIGINFO：会将其他信息（比如进程ID，状态信息等）作为参数传入信号处理函数中。（这时应该使用 sa_sigaction 而不是 sa_handler）
+     */
+    act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;  
+    act.sa_sigaction = sigsegvHandler;
+    /* 如果开启了崩溃日志，则捕捉SIGSEGV、SIGBUS、SIGFPE、SIGILL和SIGABRT信号 */
+    if(server.crashlog_enabled) {
+        sigaction(SIGSEGV, &act, NULL);
+        sigaction(SIGBUS, &act, NULL);
+        sigaction(SIGFPE, &act, NULL);
+        sigaction(SIGILL, &act, NULL);
+        sigaction(SIGABRT, &act, NULL);
+    }
+    return;
 }
 ```
 
@@ -788,4 +1193,124 @@ void populateCommandTable(void) {
     }
     /* 检查哨兵配置文件 */
     if (server.sentinel_mode) sentinelCheckConfigFile();
+
+    /* Do system checks */
+    /* linuxMemoryWarnings：在内存使用达到某个阈值时发出警告
+     * checkXenClocksource：检查系统时钟源是否正确，如果不正确则可能导致性能下降
+     * checkLinuxMadvFreeForkBug：检查系统是否受到特定内核bug影响，可能导致在后台保存数据时出现数据损坏
+     */
+#ifdef __linux__
+    linuxMemoryWarnings();
+    sds err_msg = NULL;
+    if (checkXenClocksource(&err_msg) < 0) {
+        serverLog(LL_WARNING, "WARNING %s", err_msg);
+        sdsfree(err_msg);
+    }
+#if defined (__arm64__)
+    int ret;
+    if ((ret = checkLinuxMadvFreeForkBug(&err_msg)) <= 0) {
+        if (ret < 0) {
+            serverLog(LL_WARNING, "WARNING %s", err_msg);
+            sdsfree(err_msg);
+        } else
+            serverLog(LL_WARNING, "Failed to test the kernel for a bug that could lead to data corruption during background save. "
+                                  "Your system could be affected, please report this error.");
+        if (!checkIgnoreWarning("ARM64-COW-BUG")) {
+            serverLog(LL_WARNING,"Redis will now exit to prevent data corruption. "
+                                 "Note that it is possible to suppress this warning by setting the following config: ignore-warnings ARM64-COW-BUG");
+            exit(1);
+        }
+    }
+#endif /* __arm64__ */
+#endif /* __linux__ */
+
+    /* Daemonize if needed */
+    /* 检查当前 Redis 进程是否被某个监控进程管理，检查方式因平台而异，
+     * Linux 上的实现是检查当前进程的父进程是否为 1（init 进程）。如果是，说明 Redis 进程被启动在监控模式下，否则不是。 */
+    server.supervised = redisIsSupervised(server.supervised_mode);
+    /* 判断redis是否需要后台运行 */
+    int background = server.daemonize && !server.supervised;
+    if (background) daemonize();
+
+    serverLog(LL_NOTICE, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
+    serverLog(LL_NOTICE,
+        "Redis version=%s, bits=%d, commit=%s, modified=%d, pid=%d, just started",
+            REDIS_VERSION,
+            (sizeof(long) == 8) ? 64 : 32,
+            redisGitSHA1(),
+            strtol(redisGitDirty(),NULL,10) > 0,
+            (int)getpid());
+
+    if (argc == 1) {
+        serverLog(LL_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/redis.conf", argv[0]);
+    } else {
+        serverLog(LL_NOTICE, "Configuration loaded");
+    }
+    /* 初始化服务器相关的结构体和参数 */
+    initServer();
+    if (background || server.pidfile) createPidFile();
+    if (server.set_proc_title) redisSetProcTitle(NULL);
+    redisAsciiArt();
+    checkTcpBacklogSettings();
+    if (server.cluster_enabled) {
+        clusterInit();
+    }
+    if (!server.sentinel_mode) {
+        moduleInitModulesSystemLast();
+        moduleLoadFromQueue();
+    }
+    ACLLoadUsersAtStartup();
+    initListeners();
+    if (server.cluster_enabled) {
+        clusterInitListeners();
+    }
+    InitServerLast();
+
+    if (!server.sentinel_mode) {
+        /* Things not needed when running in Sentinel mode. */
+        serverLog(LL_NOTICE,"Server initialized");
+        aofLoadManifestFromDisk();
+        loadDataFromDisk();
+        aofOpenIfNeededOnServerStart();
+        aofDelHistoryFiles();
+        if (server.cluster_enabled) {
+            serverAssert(verifyClusterConfigWithData() == C_OK);
+        }
+
+        for (j = 0; j < CONN_TYPE_MAX; j++) {
+            connListener *listener = &server.listeners[j];
+            if (listener->ct == NULL)
+                continue;
+
+            serverLog(LL_NOTICE,"Ready to accept connections %s", listener->ct->get_type(NULL));
+        }
+
+        if (server.supervised_mode == SUPERVISED_SYSTEMD) {
+            if (!server.masterhost) {
+                redisCommunicateSystemd("STATUS=Ready to accept connections\n");
+            } else {
+                redisCommunicateSystemd("STATUS=Ready to accept connections in read-only mode. Waiting for MASTER <-> REPLICA sync\n");
+            }
+            redisCommunicateSystemd("READY=1\n");
+        }
+    } else {
+        sentinelIsRunning();
+        if (server.supervised_mode == SUPERVISED_SYSTEMD) {
+            redisCommunicateSystemd("STATUS=Ready to accept connections\n");
+            redisCommunicateSystemd("READY=1\n");
+        }
+    }
+
+    /* Warning the user about suspicious maxmemory setting. */
+    if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
+        serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
+    }
+
+    redisSetCpuAffinity(server.server_cpulist);
+    setOOMScoreAdj(-1);
+
+    aeMain(server.el);
+    aeDeleteEventLoop(server.el);
+    return 0;
+
 ```
