@@ -48,7 +48,7 @@ function nav() {
     {
       text: 'Redis',
       activeMatch: '^/redis/',
-      link: '/redis/zmalloc',
+      link: '/redis/ae',
     },
   ]
 }
@@ -229,7 +229,9 @@ function sidebarRedis() {
       collapsible: true,
       items: [
         { text: 'adlist', link: '/redis/adlist' },
+        { text: 'ae_epoll', link: '/redis/ae_epoll' },
         { text: 'ae', link: '/redis/ae' },
+        { text: 'anet', link: '/redis/anet' },
         { text: 'config', link: '/redis/config' },
         { text: 'connection', link: '/redis/connection' },
         { text: 'dict', link: '/redis/dict' },

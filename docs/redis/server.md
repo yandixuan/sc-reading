@@ -4,7 +4,12 @@
 
 ### 全局变量
 
+`全局变量`：在编译阶段就已经分配了内存空间，因此无需手动分配内存。
+
 ```c
+/* redis服务器 */
+extern struct redisServer server;
+
 /* redis所有支持的命令的硬编码表 */
 extern struct redisCommand redisCommandTable[];
 ```
@@ -734,19 +739,23 @@ void initServer(void) {
 
     /* Create the Redis databases, and initialize other internal state. */
     for (j = 0; j < server.dbnum; j++) {
+        /* 给当前数据库创建一个字典结构，并使用预定义类型dbDictType */
         server.db[j].dict = dictCreate(&dbDictType);
         server.db[j].expires = dictCreate(&dbExpiresDictType);
         server.db[j].expires_cursor = 0;
         server.db[j].blocking_keys = dictCreate(&keylistDictType);
         server.db[j].blocking_keys_unblock_on_nokey = dictCreate(&objectKeyPointerValueDictType);
         server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType);
+        /* 给当前数据库创建一个存储被当前客户端所监视的键的列表，并使用预定义类型keylistDictType */
         server.db[j].watched_keys = dictCreate(&keylistDictType);
+        /* 给当前数据库设置编号 */
         server.db[j].id = j;
         server.db[j].avg_ttl = 0;
         server.db[j].defrag_later = listCreate();
         server.db[j].slots_to_keys = NULL; /* Set by clusterInit later on if necessary. */
         listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
+    /* 初始化LRU淘汰池 */
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
     server.pubsub_channels = dictCreate(&keylistDictType);
     server.pubsub_patterns = dictCreate(&keylistDictType);
@@ -812,16 +821,19 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
-    /* 创建一个时间事件，执行函数为 serverCron，
-     * 这是我们增量处理许多后台操作的方法，比如客户端超时，清除未访问的过期键等等. */ 
+    /* 创建一个时间事件，这个定时器事件每秒会执行一次serverCron函数，用于执行一些周期性的任务，例如检查过期键值对、清理过期数据等。 */ 
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
+        /* 如果创建定时器事件失败（返回AE_ERR），那么服务器将调用serverPanic函数进入崩溃状态，并退出程序。 */
         serverPanic("Can't create event loop timers.");
         exit(1);
     }
 
     /* Register a readable event for the pipe used to awake the event loop
      * from module threads. */
-    /* 注册一个可读事件，用于在模块中阻塞的客户端需要注意时唤醒事件循环 */ 
+    /* 通过 aeCreateFileEvent 函数注册一个将 server.module_pipe[0] 文件描述符上的可读事件与 modulePipeReadable() 事件处理器函数关联起来的事件。
+     * 当 server.module_pipe[0] 上有可读数据时，就会触发 modulePipeReadable() 函数被调用，接着根据管道缓冲区内是否还有未处理的数据来判断后续要做什么操作。
+     * 这段代码主要是为 Redis 加载的模块与 Redis 核心提供相互通信之用，
+     * 因为 Redis 模块加载器（Redis Module Loader）是通过 Unix 域套接字（Unix Domain Socket）与 Redis 服务器通信的。 */ 
     if (aeCreateFileEvent(server.el, server.module_pipe[0], AE_READABLE,
         modulePipeReadable,NULL) == AE_ERR) {
             serverPanic(
@@ -1015,7 +1027,7 @@ void setupSignalHandlers(void) {
     /* ACL子系统的初始化，是6.0之后新增的内容 */
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
-    /* 初始化模块环境并注册api https://github.com/vislee/leevis.com/issues/60 */             
+    /* 初始化模块环境并注册api https://github.com/vislee/leevis.com/issues/60 */
     moduleInitModulesSystem();
     /* 初始化连接类型 */
     connTypeInitialize();
