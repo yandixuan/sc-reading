@@ -2,7 +2,7 @@
 
 ## 头文件
 
-### 宏
+### 多路复用API
 
 不同的平台引入不同实现（类似门面模式）
 
@@ -25,6 +25,40 @@
         #endif
     #endif
 #endif
+```
+
+## 事件定义
+
+```c
+/* 没有注册任何事件 */
+#define AE_NONE 0       /* No events registered. */
+/* 当描述符可读时触发事件 */
+#define AE_READABLE 1   /* Fire when descriptor is readable. */
+/* 当描述符可写时触发事件 */
+#define AE_WRITABLE 2   /* Fire when descriptor is writable. */
+/* 无论何时，在同一事件循环迭代中，如果已经处理过了可读事件，那么在处理可写事件时就不会触发。
+ * 在需要将数据持久化到磁盘后才回复客户端响应时非常有用。 */
+#define AE_BARRIER 4    /* With WRITABLE, never fire the event if the
+                           READABLE event already fired in the same event
+                           loop iteration. Useful when you want to persist
+                           things to disk before sending replies, and want
+                           to do that in a group fashion. */
+/* 文件事件掩码，用于表示管理文件 I/O 相关的事件 */
+#define AE_FILE_EVENTS (1<<0)
+/* 时间事件掩码，用于表示管理定时器相关的事件 */
+#define AE_TIME_EVENTS (1<<1)
+/* 所有事件掩码，包括文件和定时器两种类型的事件 */
+#define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)
+/* 表示事件轮询期间，如果当前没有已准备好的事件，则立即返回，而不进入休眠等待状态 */
+#define AE_DONT_WAIT (1<<2)
+/* 表示在每次进入 aeProcessEvents 函数的休眠等待前执行指定的回调函数 */
+#define AE_CALL_BEFORE_SLEEP (1<<3)
+/* 表示在每次唤醒 aeProcessEvents 函数结束休眠等待时执行指定的回调函数 */
+#define AE_CALL_AFTER_SLEEP (1<<4)
+/* 标识当前已经没有更多的事件需要被处理 */
+#define AE_NOMORE -1
+/* 标识事件已被删除 */
+#define AE_DELETED_EVENT_ID -1
 ```
 
 ## 结构体
@@ -219,6 +253,33 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 }
 ```
 
+### usUntilEarliestTimer
+
+计算离最早的时间事件还有多长时间才会触发
+
+```c
+static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
+    /* 先取事件循环对象中时间事件的头结点 */
+    aeTimeEvent *te = eventLoop->timeEventHead;
+    /* 空则返回-1，表示不需要等待 */
+    if (te == NULL) return -1;
+    /* 最早的时间事件 */
+    aeTimeEvent *earliest = NULL;
+    /* 遍历链表 */
+    while (te) {
+        /* 找到最早要触发的事件 earliest，并将其记录下来 */
+        if ((!earliest || te->when < earliest->when) && te->id != AE_DELETED_EVENT_ID)
+            earliest = te;
+        te = te->next;
+    }
+    /* 获取当前的系统时间 now */
+    monotime now = getMonotonicUs();
+    /* now ≥ earliest->when，说明最早的事件已经触发或者正在触发，返回 0
+     * 否则，返回触发最早事件所需的等待时间，即 earliest->when - now */
+    return (now >= earliest->when) ? 0 : earliest->when - now;
+}
+```
+
 ### aeProcessEvents
 
 ```c
@@ -227,21 +288,25 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     int processed = 0, numevents;
 
     /* Nothing to do? return ASAP */
+    /* 所触发事件类型我们并没有注册，那么我们直接返回 */
     if (!(flags & AE_TIME_EVENTS) && !(flags & AE_FILE_EVENTS)) return 0;
 
     /* Note that we want to call select() even if there are no
      * file events to process as long as we want to process time
      * events, in order to sleep until the next time event is ready
      * to fire. */
+    /* 如果有监控文件事件，或者要处理定时器事件并且没有设置不阻塞标志 
+     * 也要调用 select() 函数以便等待下一个时间事件到来
+     */ 
     if (eventLoop->maxfd != -1 ||
         ((flags & AE_TIME_EVENTS) && !(flags & AE_DONT_WAIT))) {
         int j;
         struct timeval tv, *tvp;
         int64_t usUntilTimer = -1;
-
+        /* 如果定义处理定时器事件的标志且没有设置不阻塞，取最快到达的定时器时间 */
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
             usUntilTimer = usUntilEarliestTimer(eventLoop);
-
+        /* 需要等待，则将等待时间转化为秒和微秒，并将其赋值给 tv.tv_sec 和 tv.tv_usec，同时将指向该结构体的指针赋给 tvp */
         if (usUntilTimer >= 0) {
             tv.tv_sec = usUntilTimer / 1000000;
             tv.tv_usec = usUntilTimer % 1000000;
@@ -250,37 +315,44 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             /* If we have to check for events but need to return
              * ASAP because of AE_DONT_WAIT we need to set the timeout
              * to zero */
+            /* 设置了 AE_DONT_WAIT 标识，则表示事件循环不能阻塞等待并应立即返回结果，因此等待时间应设为 0，
+             * 然后同样将指向该结构体的指针赋给 tvp */
             if (flags & AE_DONT_WAIT) {
                 tv.tv_sec = tv.tv_usec = 0;
                 tvp = &tv;
             } else {
                 /* Otherwise we can block */
+                /* 一直等待 */
                 tvp = NULL; /* wait forever */
             }
         }
-
+        /* 如果需要检测事件但由于 AE_DONT_WAIT 的原因需要立即返回，则超时值为 0 */
         if (eventLoop->flags & AE_DONT_WAIT) {
             tv.tv_sec = tv.tv_usec = 0;
             tvp = &tv;
         }
-
+        /* 如果设置了 beforesleep 回调函数并需要在休眠之前执行该回调函数，则执行该回调函数 */
         if (eventLoop->beforesleep != NULL && flags & AE_CALL_BEFORE_SLEEP)
             eventLoop->beforesleep(eventLoop);
 
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
+        /* 调用多路复用 API，直到超时或某个事件发生才会返回 */
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* Don't process file events if not requested. */
+        /* 如果不需要处理文件事件，则将 numevents 设为 0 */
         if (!(flags & AE_FILE_EVENTS)) {
             numevents = 0;
         }
 
         /* After sleep callback. */
+        /* 如果设置了 aftersleep 回调函数并需要在休眠后执行该回调函数，则执行该回调函数 */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
-
+        /* 遍历所有已触发的事件 */
         for (j = 0; j < numevents; j++) {
+            /* 获取 fd、mask 和相应的 aeFileEvent 结构体等信息 */
             int fd = eventLoop->fired[j].fd;
             aeFileEvent *fe = &eventLoop->events[fd];
             int mask = eventLoop->fired[j].mask;
@@ -297,6 +369,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * This is useful when, for instance, we want to do things
              * in the beforeSleep() hook, like fsyncing a file to disk,
              * before replying to a client. */
+            /* 正常情况下，应先处理可读事件再处理可写事件。这样做比较有利，可以在处理某个查询后立即响应客户端的回复。
+             * 但如果 fe->mask & AE_BARRIER 被设置，表示我们需要执行与正常情况相反的操作：可写事件不能在可读事件之后触发。
+             * 这种情况下，需要反转调用顺序，先处理可写事件再处理可读事件。
+             * 这对于一些需要在 beforeSleep() 钩子中执行操作（如将文件 fsync 到磁盘）才能响应客户端的请求时非常有用。*/ 
             int invert = fe->mask & AE_BARRIER;
 
             /* Note the "fe->mask & mask & ..." code: maybe an already
@@ -305,6 +381,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              *
              * Fire the readable event if the call sequence is not
              * inverted. */
+            /* 如果调用顺序不需要反转且该 fd 上可以进行读取 */ 
             if (!invert && fe->mask & mask & AE_READABLE) {
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
                 fired++;
@@ -312,6 +389,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             }
 
             /* Fire the writable event. */
+            /* 如果该 fd 上可以进行写入 */
             if (fe->mask & mask & AE_WRITABLE) {
                 if (!fired || fe->wfileProc != fe->rfileProc) {
                     fe->wfileProc(eventLoop,fd,fe->clientData,mask);
@@ -321,6 +399,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
             /* If we have to invert the call, fire the readable event now
              * after the writable one. */
+            /* 在反转调用标志（invert）为真时，该函数会优先处理 writable 事件，
+             * 如果此次循环中执行了读操作（即 fired 大于 0），则再处理 readable 事件，以便提高整体性能 */ 
             if (invert) {
                 fe = &eventLoop->events[fd]; /* Refresh in case of resize. */
                 if ((fe->mask & mask & AE_READABLE) &&
@@ -330,14 +410,35 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                     fired++;
                 }
             }
-
+            /* 处理数+1 */
             processed++;
         }
     }
     /* Check time events */
+    /* 判断是否处理定时任务事件 */
     if (flags & AE_TIME_EVENTS)
         processed += processTimeEvents(eventLoop);
-
+    /* 返回已处理文件/时间事件的数量 */
     return processed; /* return the number of processed file/time events */
+}
+```
+
+### aeMain
+
+```c
+void aeMain(aeEventLoop *eventLoop) {
+    /* 事件循环对象的 stop 属性设置为0，表示事件轮询未停止 */
+    eventLoop->stop = 0;
+    /* 不断轮询 */
+    while (!eventLoop->stop) {
+        /* 处理已就绪的事件
+         * AE_ALL_EVENTS 表示监听所有类型的事件
+         * E_CALL_BEFORE_SLEEP 表示在进入休眠等待之前调用指定的回调函数
+         * AE_CALL_AFTER_SLEEP 表示在等待唤醒事件后执行指定的回调函数。
+         */
+        aeProcessEvents(eventLoop, AE_ALL_EVENTS|
+                                   AE_CALL_BEFORE_SLEEP|
+                                   AE_CALL_AFTER_SLEEP);
+    }
 }
 ```

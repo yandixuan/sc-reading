@@ -628,21 +628,181 @@ void adjustOpenFilesLimit(void) {
 }
 ```
 
+### checkTcpBacklogSettings
+
+该函数首先判断操作系统是否支持通过/proc/sys/net/core/somaxconn文件来获取当前所有监听套接字的默认backlog值的最大值。
+
+如果支持，就打开这个文件并读取其中内容，将其与服务器设置的backlog值进行比较。如果当前somaxconn值小于指定的backlog值，则发出警告信息。
+
+如果系统不支持通过/proc/sys/net/core/somaxconn文件来获取值，则尝试使用其他方式读取内核参数，例如sysctl或常量SOMAXCONN。
+
+### createSocketAcceptHandler
+
+```c
+int createSocketAcceptHandler(connListener *sfd, aeFileProc *accept_handler) {
+    int j;
+
+    for (j = 0; j < sfd->count; j++) {
+        if (aeCreateFileEvent(server.el, sfd->fd[j], AE_READABLE, accept_handler,sfd) == AE_ERR) {
+            /* Rollback */
+            for (j = j-1; j >= 0; j--) aeDeleteFileEvent(server.el, sfd->fd[j], AE_READABLE);
+            return C_ERR;
+        }
+    }
+    return C_OK;
+}
+```
+
+### beforeSleep
+
+```c
+void beforeSleep(struct aeEventLoop *eventLoop) {
+    /* 取消未使用的参数警告 */
+    UNUSED(eventLoop);
+    /* 记录 zmalloc 已经使用多少内存，如果超过峰值则更新 */
+    size_t zmalloc_used = zmalloc_used_memory();
+    if (zmalloc_used > server.stat_peak_memory)
+        server.stat_peak_memory = zmalloc_used;
+
+    /* Just call a subset of vital functions in case we are re-entering
+     * the event loop from processEventsWhileBlocked(). Note that in this
+     * case we keep track of the number of events we are processing, since
+     * processEventsWhileBlocked() wants to stop ASAP if there are no longer
+     * events to handle. */
+    if (ProcessingEventsWhileBlocked) {
+        uint64_t processed = 0;
+        processed += handleClientsWithPendingReadsUsingThreads();
+        processed += connTypeProcessPendingData();
+        if (server.aof_state == AOF_ON || server.aof_state == AOF_WAIT_REWRITE)
+            flushAppendOnlyFile(0);
+        processed += handleClientsWithPendingWrites();
+        processed += freeClientsInAsyncFreeQueue();
+        server.events_processed_while_blocked += processed;
+        return;
+    }
+
+    /* Handle precise timeouts of blocked clients. */
+    handleBlockedClientsTimeout();
+
+    /* We should handle pending reads clients ASAP after event loop. */
+    handleClientsWithPendingReadsUsingThreads();
+
+    /* Handle pending data(typical TLS). (must be done before flushAppendOnlyFile) */
+    connTypeProcessPendingData();
+
+    /* If any connection type(typical TLS) still has pending unread data don't sleep at all. */
+    aeSetDontWait(server.el, connTypeHasPendingData());
+
+    /* Call the Redis Cluster before sleep function. Note that this function
+     * may change the state of Redis Cluster (from ok to fail or vice versa),
+     * so it's a good idea to call it before serving the unblocked clients
+     * later in this function. */
+    if (server.cluster_enabled) clusterBeforeSleep();
+
+    /* Run a fast expire cycle (the called function will return
+     * ASAP if a fast cycle is not needed). */
+    if (server.active_expire_enabled && iAmMaster())
+        activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
+
+    /* Unblock all the clients blocked for synchronous replication
+     * in WAIT or WAITAOF. */
+    if (listLength(server.clients_waiting_acks))
+        processClientsWaitingReplicas();
+
+    /* Check if there are clients unblocked by modules that implement
+     * blocking commands. */
+    if (moduleCount()) {
+        moduleFireServerEvent(REDISMODULE_EVENT_EVENTLOOP,
+                              REDISMODULE_SUBEVENT_EVENTLOOP_BEFORE_SLEEP,
+                              NULL);
+        moduleHandleBlockedClients();
+    }
+
+    /* Try to process pending commands for clients that were just unblocked. */
+    if (listLength(server.unblocked_clients))
+        processUnblockedClients();
+
+    /* Send all the slaves an ACK request if at least one client blocked
+     * during the previous event loop iteration. Note that we do this after
+     * processUnblockedClients(), so if there are multiple pipelined WAITs
+     * and the just unblocked WAIT gets blocked again, we don't have to wait
+     * a server cron cycle in absence of other event loop events. See #6623.
+     * 
+     * We also don't send the ACKs while clients are paused, since it can
+     * increment the replication backlog, they'll be sent after the pause
+     * if we are still the master. */
+    if (server.get_ack_from_slaves && !isPausedActionsWithUpdate(PAUSE_ACTION_REPLICA)) {
+        sendGetackToReplicas();
+        server.get_ack_from_slaves = 0;
+    }
+
+    /* We may have received updates from clients about their current offset. NOTE:
+     * this can't be done where the ACK is received since failover will disconnect 
+     * our clients. */
+    updateFailoverStatus();
+
+    /* Since we rely on current_client to send scheduled invalidation messages
+     * we have to flush them after each command, so when we get here, the list
+     * must be empty. */
+    serverAssert(listLength(server.tracking_pending_keys) == 0);
+
+    /* Send the invalidation messages to clients participating to the
+     * client side caching protocol in broadcasting (BCAST) mode. */
+    trackingBroadcastInvalidationMessages();
+
+    /* Try to process blocked clients every once in while.
+     *
+     * Example: A module calls RM_SignalKeyAsReady from within a timer callback
+     * (So we don't visit processCommand() at all).
+     *
+     * must be done before flushAppendOnlyFile, in case of appendfsync=always,
+     * since the unblocked clients may write data. */
+    handleClientsBlockedOnKeys();
+
+    /* Write the AOF buffer on disk,
+     * must be done before handleClientsWithPendingWritesUsingThreads,
+     * in case of appendfsync=always. */
+    if (server.aof_state == AOF_ON || server.aof_state == AOF_WAIT_REWRITE)
+        flushAppendOnlyFile(0);
+
+    /* Update the fsynced replica offset.
+     * If an initial rewrite is in progress then not all data is guaranteed to have actually been
+     * persisted to disk yet, so we cannot update the field. We will wait for the rewrite to complete. */
+    if (server.aof_state == AOF_ON && server.fsynced_reploff != -1) {
+        long long fsynced_reploff_pending;
+        atomicGet(server.fsynced_reploff_pending, fsynced_reploff_pending);
+        server.fsynced_reploff = fsynced_reploff_pending;
+    }
+
+    /* Handle writes with pending output buffers. */
+    handleClientsWithPendingWritesUsingThreads();
+
+    /* Close clients that need to be closed asynchronous */
+    freeClientsInAsyncFreeQueue();
+
+    /* Incrementally trim replication backlog, 10 times the normal speed is
+     * to free replication backlog as much as possible. */
+    if (server.repl_backlog)
+        incrementalTrimReplicationBacklog(10*REPL_BACKLOG_TRIM_BLOCKS_PER_CALL);
+
+    /* Disconnect some clients if they are consuming too much memory. */
+    evictClients();
+
+    /* Before we are going to sleep, let the threads access the dataset by
+     * releasing the GIL. Redis main thread will not touch anything at this
+     * time. */
+    if (moduleCount()) moduleReleaseGIL();
+    /********************* WARNING ********************
+     * Do NOT add anything below moduleReleaseGIL !!! *
+     ***************************** ********************/
+}
+```
+
+### afterSleep
+
 ### initServer
 
-:::tip
-
-1. 初始化服务器状态结构体server的各个字段，如各个数据库的状态结构体、命令表、统计信息等；
-2. 设置服务器的各种默认参数值，如最大客户端数量、默认的最大内存限制等；
-3. 初始化随机数生成器，以便后续使用；
-4. 读取系统的配置参数，包括最大打开文件数量限制等；
-5. 设置崩溃处理函数，以便程序发生错误时能够及时处理；
-6. 初始化慢查询日志；
-7. 加载用户自定义的扩展命令；
-8. 初始化事件循环机制。
-:::
-
-[参考](https://zhuanlan.zhihu.com/p/620557148)
+[参考](https://juejin.cn/post/7219925045228437562)
 
 ```c
 void initServer(void) {
@@ -859,6 +1019,7 @@ void initServer(void) {
 
     /* 初始化LUA机制 */
     scriptingInit(1);
+    /* 初始化Function机制 */
     functionsInit();
     /* 初始化慢日志机制 */
     slowlogInit();
@@ -867,11 +1028,102 @@ void initServer(void) {
 
     /* Initialize ACL default password if it exists */
     ACLUpdateDefaultUserPassword(server.requirepass);
-
+    /* 用于启用或禁用Redis的看门狗程序。看门狗程序是一个定期的任务，用于检查Redis是否处于假死状态，如果是，则通过发送SIGUSR1信号重启Redis进程 */
     applyWatchdogPeriod();
-
+    /* 否设置了客户端的最大内存使用限制
+     * 如果设置了，就会调用 initServerClientMemUsageBuckets() 函数来初始化一个用于记录客户端内存使用情况的数据结构。
+     * 该函数会在 dict.c 文件中定义。在启用了客户端内存限制后，服务器会定期检查客户端的内存使用情况，并在客户端使用的内存超出限制时，
+     * 通过断开与客户端的连接来保证服务器的稳定性。 */
     if (server.maxmemory_clients != 0)
         initServerClientMemUsageBuckets();
+}
+```
+
+### initListeners
+
+根据配置文件中指定的IP地址和端口号创建并启动监听套接字
+
+在`connTypeInitialize`方法中，我们注册了不同连接类型的`ConnectionType`的结构体，注册到了connTypes数组中。
+
+而tcp的监听端口则由`listenToPort`函数完成
+
+```c
+void initListeners() {
+    /* Setup listeners from server config for TCP/TLS/Unix */
+    int conn_index;
+    connListener *listener;
+    /* 如果server.port不为0，则创建监听套接字类型为TCP的连接器 */
+    if (server.port != 0) {
+        conn_index = connectionIndexByType(CONN_TYPE_SOCKET);
+        if (conn_index < 0)
+            serverPanic("Failed finding connection listener of %s", CONN_TYPE_SOCKET);
+        listener = &server.listeners[conn_index];
+        listener->bindaddr = server.bindaddr;
+        listener->bindaddr_count = server.bindaddr_count;
+        listener->port = server.port;
+        listener->ct = connectionByType(CONN_TYPE_SOCKET);
+    }
+
+    if (server.tls_port || server.tls_replication || server.tls_cluster) {
+        ConnectionType *ct_tls = connectionTypeTls();
+        if (!ct_tls) {
+            serverLog(LL_WARNING, "Failed finding TLS support.");
+            exit(1);
+        }
+        if (connTypeConfigure(ct_tls, &server.tls_ctx_config, 1) == C_ERR) {
+            serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
+            exit(1);
+        }
+    }
+    /* 如果server.tls_port不为0，则创建监听套接字类型为TLS的连接器 */
+    if (server.tls_port != 0) {
+        conn_index = connectionIndexByType(CONN_TYPE_TLS);
+        if (conn_index < 0)
+            serverPanic("Failed finding connection listener of %s", CONN_TYPE_TLS);
+        /* 获取监听器数组对应索引位置的结构体 */
+        listener = &server.listeners[conn_index];
+        /* 使用 bindaddr 和 bindaddr_count 创建 TLS 连接器*/
+        listener->bindaddr = server.bindaddr;
+        listener->bindaddr_count = server.bindaddr_count;
+        listener->port = server.tls_port;
+        listener->ct = connectionByType(CONN_TYPE_TLS);
+    }
+    /* 如果设置了 Unix 套接字，则创建类型为 Unix 的套接字 */
+    if (server.unixsocket != NULL) {
+        conn_index = connectionIndexByType(CONN_TYPE_UNIX);
+        if (conn_index < 0)
+            serverPanic("Failed finding connection listener of %s", CONN_TYPE_UNIX);
+        listener = &server.listeners[conn_index];
+        /* 使用 unixsocket 和 unixsocketperm 参数创建 Unix 连接器 */
+        listener->bindaddr = &server.unixsocket;
+        listener->bindaddr_count = 1;
+        listener->ct = connectionByType(CONN_TYPE_UNIX);
+        listener->priv = &server.unixsocketperm; /* Unix socket specified */
+    }
+
+    /* create all the configured listener, and add handler to start to accept */
+    /* 创建所有配置的监听器，并添加处理程序以开始接收连接 */
+    int listen_fds = 0;
+    for (int j = 0; j < CONN_TYPE_MAX; j++) {
+        listener = &server.listeners[j];
+        if (listener->ct == NULL)
+            continue;
+        /* 对不同的套接字，执行相应的监听方法 */
+        if (connListen(listener) == C_ERR) {
+            serverLog(LL_WARNING, "Failed listening on port %u (%s), aborting.", listener->port, listener->ct->get_type(NULL));
+            exit(1);
+        }
+        /* 将 listenfd 和 accept 事件（也就是接收客户端连接的处理事件）注册到事件循环器 */
+        if (createSocketAcceptHandler(listener, connAcceptHandler(listener->ct)) != C_OK)
+            serverPanic("Unrecoverable error creating %s listener accept handler.", listener->ct->get_type(NULL));
+
+       listen_fds += listener->count;
+    }
+    /* 如果没有成功设置任何监听套接字，则立即退出服务器 */
+    if (listen_fds == 0) {
+        serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
+        exit(1);
+    }
 }
 ```
 
@@ -1260,35 +1512,50 @@ void setupSignalHandlers(void) {
     }
     /* 初始化服务器相关的结构体和参数 */
     initServer();
+    /* 是否需要以后台进程方式运行或者设置了pidfile，如有则创建pidfile */
     if (background || server.pidfile) createPidFile();
+    /* 设置命令行进程标题，方便观察进程信息 */
     if (server.set_proc_title) redisSetProcTitle(NULL);
+    /* 显示Redis启动LOGO */
     redisAsciiArt();
+    /* 检查server.tcp_backlog(最大允许连接客户端数)相关参数配置是否足够大 */
     checkTcpBacklogSettings();
+    /* 如果开启了集群模式，则进行集群初始化 */
     if (server.cluster_enabled) {
         clusterInit();
     }
+    /* 如果不是Sentinel模式，则初始化模块，并加载从配置文件里提前读入到队列中的模块 */
     if (!server.sentinel_mode) {
         moduleInitModulesSystemLast();
         moduleLoadFromQueue();
     }
+    /* 加载启动时用户的ACL信息 */
     ACLLoadUsersAtStartup();
+    /* 初始化监听器 */
     initListeners();
+    /* 如果是集群模式，则初始化集群监听器 */
     if (server.cluster_enabled) {
         clusterInitListeners();
     }
+    /* 最后进行一些其他服务器初始化操作 */
     InitServerLast();
-
+    /* 如果不是Sentinel模式 */
     if (!server.sentinel_mode) {
         /* Things not needed when running in Sentinel mode. */
         serverLog(LL_NOTICE,"Server initialized");
+        /* 从磁盘上加载AOF持久化的manifest文件 */
         aofLoadManifestFromDisk();
+        /* 从磁盘上加载RDB持久化的快照 */
         loadDataFromDisk();
+        /* 如果AOF持久化开启，则打开并同步至最新状态 */
         aofOpenIfNeededOnServerStart();
+        /* 删除已经超过历史版本数目限制的AOF备份文件 */
         aofDelHistoryFiles();
+        /* 检验集群配置信息是否正确 */
         if (server.cluster_enabled) {
             serverAssert(verifyClusterConfigWithData() == C_OK);
         }
-
+        /* 输出监听端口信息 */
         for (j = 0; j < CONN_TYPE_MAX; j++) {
             connListener *listener = &server.listeners[j];
             if (listener->ct == NULL)
@@ -1296,7 +1563,7 @@ void setupSignalHandlers(void) {
 
             serverLog(LL_NOTICE,"Ready to accept connections %s", listener->ct->get_type(NULL));
         }
-
+        /* 如果是以systemd方式管理进程，则通过redisCommunicateSystemd()函数与对应的守护程序通信，告诉本进程状态为"就绪"的状态 */
         if (server.supervised_mode == SUPERVISED_SYSTEMD) {
             if (!server.masterhost) {
                 redisCommunicateSystemd("STATUS=Ready to accept connections\n");
@@ -1306,6 +1573,7 @@ void setupSignalHandlers(void) {
             redisCommunicateSystemd("READY=1\n");
         }
     } else {
+        /* 如果是Sentinel模式，则检测当前启动的哨兵状态并向systemd守护程序通信进行状态更新 */
         sentinelIsRunning();
         if (server.supervised_mode == SUPERVISED_SYSTEMD) {
             redisCommunicateSystemd("STATUS=Ready to accept connections\n");
@@ -1314,14 +1582,19 @@ void setupSignalHandlers(void) {
     }
 
     /* Warning the user about suspicious maxmemory setting. */
+    /* 如果设置了maxmemory值过小，发送警告信息给日志记录系统 */
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
-
+    /* 通过配置来设置CPU亲和度
+     * Redis 的进程绑定到特定的 CPU 核心上，可以更有效地利用硬件资源并减少由于 CPU 切换造成的额外开销 */
     redisSetCpuAffinity(server.server_cpulist);
+    /* 设置 Redis 进程在全局进程列表中的 OOM_Score_Adjust 值，该值越低，
+     * 则表示对系统的资源占用越少，在系统遇到资源吃紧情况下更难被杀死。 */
     setOOMScoreAdj(-1);
-
+    /* 启动事件循环机制 */
     aeMain(server.el);
+    /* 事件循环结束，删除event loop */
     aeDeleteEventLoop(server.el);
     return 0;
 
