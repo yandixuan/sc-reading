@@ -195,3 +195,55 @@ done:
     beforeNextClient(c);
 }
 ```
+
+### initThreadedIO
+
+初始化多 IO 线程
+
+```c
+/* Initialize the data structures needed for threaded I/O. */
+void initThreadedIO(void) {
+    /* 初始化时，没有io线程处于活跃状态 */
+    server.io_threads_active = 0; /* We start with threads not active. */
+
+    /* Indicate that io-threads are currently idle */
+    /* 初始值设为"空闲" */
+    io_threads_op = IO_THREADS_OP_IDLE;
+
+    /* Don't spawn any thread if the user selected a single thread:
+     * we'll handle I/O directly from the main thread. */
+    /* 如果只配置了一个IO线程，我们直接用主线程处理 I/O */
+    if (server.io_threads_num == 1) return;
+    /* 如果配置的线程数超出上限，打印错误日志并退出程序 */
+    if (server.io_threads_num > IO_THREADS_MAX_NUM) {
+        serverLog(LL_WARNING,"Fatal: too many I/O threads configured. "
+                             "The maximum number is %d.", IO_THREADS_MAX_NUM);
+        exit(1);
+    }
+
+    /* Spawn and initialize the I/O threads. */
+    /* 生成并初始化I/O线程 */
+    for (int i = 0; i < server.io_threads_num; i++) {
+        /* Things we do for all the threads including the main thread. */
+        io_threads_list[i] = listCreate();
+        if (i == 0) continue; /* Thread 0 is the main thread. */
+
+        /* Things we do only for the additional threads. */
+        pthread_t tid;
+        /* 初始化互斥锁变量 */
+        pthread_mutex_init(&io_threads_mutex[i],NULL);
+        /* 初始化还没处理的任务个数 */
+        setIOPendingCount(i, 0);
+        /* 主线程在启动 I/O 线程的时候会默认占用io互斥锁资源，直到有 I/O 任务主线程才会释放互斥资源，从而达到I/O线程开启工作 */
+        pthread_mutex_lock(&io_threads_mutex[i]); /* Thread will be stopped. */
+        /* 启动线程，进入 I/O 线程的主逻辑函数 IOThreadMain */
+        if (pthread_create(&tid,NULL,IOThreadMain,(void*)(long)i) != 0) {
+            /* 如果创建失败，打印错误日志并退出程序 */
+            serverLog(LL_WARNING,"Fatal: Can't initialize IO thread.");
+            exit(1);
+        }
+        /* 设置线程ID */
+        io_threads[i] = tid;
+    }
+}
+```

@@ -1127,6 +1127,21 @@ void initListeners() {
 }
 ```
 
+### InitServerLast
+
+```c
+void InitServerLast() {
+    /* 初始化BIO库（Background I/O library），用于异步执行耗时操作，例如文件读写、网络数据发送等。 */
+    bioInit();
+    /* 启动Redis的多线程I/O支持 */
+    initThreadedIO();
+    /* 启动Jemalloc后台线程（background thread），进行内存碎片整理和回收工作。 */
+    set_jemalloc_bg_thread(server.jemalloc_bg_thread);
+    /* 记录Redis服务器启动前的内存占用大小 */
+    server.initial_memory_usage = zmalloc_used_memory();
+}
+```
+
 ### populateCommandTable
 
 从commands.c中的静态表格中填充Redis命令表dict，该静态表格是从commands文件夹中的json文件自动生成的。
