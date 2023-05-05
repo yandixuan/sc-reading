@@ -287,6 +287,37 @@ struct redisObject {
 };
 ```
 
+### redisDb
+
+```c
+typedef struct redisDb {
+    /* 存储该数据集所包含的所有键值对的字典 */
+    dict *dict;                 /* The keyspace for this DB */
+    /* 存储已经设置了过期时间的键值对和相应过期时间的字典 */
+    dict *expires;              /* Timeout of keys with a timeout set */
+    /* 存储正在阻塞（blocking）的键的字典，用于BLPOP命令 */
+    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
+    /* 存储正在阻塞但在键不存在时就可以解除阻塞的键的字典，例如XREADGROP命令；这是 blocking_keys 的子集 */
+    dict *blocking_keys_unblock_on_nokey;   /* Keys with clients waiting for
+                                             * data, and should be unblocked if key is deleted (XREADEDGROUP).
+                                             * This is a subset of blocking_keys*/
+    /* 存储等待 PELLPUSH 命令（或其他相关命令）推送数据进行解锁的键的字典 */
+    dict *ready_keys;           /* Blocked keys that received a PUSH */
+    /* 存储在 MULTI/EXEC 块中监视的键的字典，用于乐观锁 */
+    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    /* 数据库id */ 
+    int id;                     /* Database ID */
+    /* 所有键的 TTL 平均值，仅用于统计 */   
+    long long avg_ttl;          /* Average TTL, just for stats */
+    /* 主动过期扫描的游标 */
+    unsigned long expires_cursor; /* Cursor of the active expire cycle. */
+    /* 需要碎片整理的键名列表，逐个进行 */
+    list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
+    /* 描述集群模式下槽与键之间映射关系的结构体。仅在dbid为0的情况下使用。 */
+    clusterSlotToKeyMapping *slots_to_keys; /* Array of slots to keys. Only used in cluster mode (db 0). */
+} redisDb;
+```
+
 ## 方法
 
 ### ustime
@@ -638,16 +669,83 @@ void adjustOpenFilesLimit(void) {
 
 ### createSocketAcceptHandler
 
+监听完端口之后，我们需要向epfd（linux）注册我们监听fd感兴趣的事件，这样才能触发我们的`accept_handler`回调函数
+
+而回调函数由不同类型的协议（socket,unix）提供各自的`accept_handler`实现
+
 ```c
 int createSocketAcceptHandler(connListener *sfd, aeFileProc *accept_handler) {
     int j;
-
+    /* 遍历所有监听描述符并创建文件事件处理器 */
     for (j = 0; j < sfd->count; j++) {
+        /* 循环检测所有监听描述符 sfd->fd[j] 的方式，确保所有绑定的端口都被监听到并进行注册 */
         if (aeCreateFileEvent(server.el, sfd->fd[j], AE_READABLE, accept_handler,sfd) == AE_ERR) {
             /* Rollback */
+            /* 回滚之前的注册，这里使用了循环值精简代码 */
             for (j = j-1; j >= 0; j--) aeDeleteFileEvent(server.el, sfd->fd[j], AE_READABLE);
             return C_ERR;
         }
+    }
+    return C_OK;
+}
+```
+
+### listenToPort
+
+Redis 服务器用于监听 TCP 连接请求的主要逻辑部分
+
+```c
+int listenToPort(connListener *sfd) {
+    int j;
+    /* 获取 connListener 对应的端口号 */
+    int port = sfd->port;
+    char **bindaddr = sfd->bindaddr;
+
+    /* If we have no bind address, we don't listen on a TCP socket */
+    /* 如果没有绑定地址，不监听 TCP 连接请求 */
+    if (sfd->bindaddr_count == 0) return C_OK;
+    /* 根据bindaddr_count遍历地址 */
+    for (j = 0; j < sfd->bindaddr_count; j++) {
+        char* addr = bindaddr[j];
+        /* 以'-'表示可选 */
+        int optional = *addr == '-';
+        if (optional) addr++;
+        if (strchr(addr,':')) {
+            /* Bind IPv6 address. */
+            /* 绑定 IPv6 地址，会返回文件标志符 */
+            sfd->fd[sfd->count] = anetTcp6Server(server.neterr,port,addr,server.tcp_backlog);
+        } else {
+            /* Bind IPv4 address. */
+             /* 绑定 IPv4 地址，会返回文件标志符 */
+            sfd->fd[sfd->count] = anetTcpServer(server.neterr,port,addr,server.tcp_backlog);
+        }
+        /* 如果绑定失败，则记录错误日志并回滚之前成功绑定的连接套接字 */
+        if (sfd->fd[sfd->count] == ANET_ERR) {
+            int net_errno = errno;
+            serverLog(LL_WARNING,
+                "Warning: Could not create server TCP listening socket %s:%d: %s",
+                addr, port, server.neterr);
+            /* 当绑定出错时，对于可选地址的情况跳过(即以'-'开头的地址) */
+            if (net_errno == EADDRNOTAVAIL && optional)
+                continue;
+            /* 对于一些特定错误码，例如不支持的地址族、协议等，也跳过。 */    
+            if (net_errno == ENOPROTOOPT     || net_errno == EPROTONOSUPPORT ||
+                net_errno == ESOCKTNOSUPPORT || net_errno == EPFNOSUPPORT ||
+                net_errno == EAFNOSUPPORT)
+                continue;
+
+            /* Rollback successful listens before exiting */
+            closeListener(sfd);
+            return C_ERR;
+        }
+        /* 设置套接字的标记（Socket Mark）(可在redis.conf中设置id)。 */
+        if (server.socket_mark_id > 0) anetSetSockMarkId(NULL, sfd->fd[sfd->count], server.socket_mark_id);
+        /* 设置套接字为非阻塞模式 */
+        anetNonBlock(NULL,sfd->fd[sfd->count]);
+        /* 设置套接字为关闭时释放其文件描述符 */
+        anetCloexec(sfd->fd[sfd->count]);
+        /* 记录成功绑定的连接套接字数量 */
+        sfd->count++;
     }
     return C_OK;
 }
@@ -1113,7 +1211,8 @@ void initListeners() {
             serverLog(LL_WARNING, "Failed listening on port %u (%s), aborting.", listener->port, listener->ct->get_type(NULL));
             exit(1);
         }
-        /* 将 listenfd 和 accept 事件（也就是接收客户端连接的处理事件）注册到事件循环器 */
+        /* 上面监听完了端口后，将fd注册进事件循环器（epoll）中，监听感兴趣的事件，
+         * 即listenfd 和 accept 事件（也就是接收客户端连接的处理事件）注册到事件循环器 */
         if (createSocketAcceptHandler(listener, connAcceptHandler(listener->ct)) != C_OK)
             serverPanic("Unrecoverable error creating %s listener accept handler.", listener->ct->get_type(NULL));
 

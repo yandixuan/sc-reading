@@ -10,6 +10,8 @@
 
 ### acceptCommonHandler
 
+Redis 在内部封装了 accept 函数的处理流程，并定义了 acceptCommonHandler 函数来统一处理客户端连接请求
+
 ```c
 void acceptCommonHandler(connection *conn, int flags, char *ip) {
     client *c;
@@ -196,6 +198,78 @@ done:
 }
 ```
 
+### IOThreadMain
+
+I/O 线程的入口函数，主要功能是处理客户端的读写请求，确保Redis服务器能够快速响应客户端请求并保持高性能和可扩展性。
+
+```c
+void *IOThreadMain(void *myid) {
+    /* The ID is the thread number (from 0 to server.io_threads_num-1), and is
+     * used by the thread to just manipulate a single sub-array of clients. */
+    long id = (unsigned long)myid;
+    char thdname[16];
+
+    /*
+     * 设置线程名称，并将CPU亲和度设置为server_cpulist中指定的CPU列表。
+     * 这可以提高系统资源利用率，因为I/O线程主要依赖CPU处理客户端请求，
+     * 界面不涉及到CPU计算操作时，也可自动进入休眠模式，以减少 CPU 开销和功耗消耗。
+     */
+    snprintf(thdname, sizeof(thdname), "io_thd_%ld", id);
+    redis_set_thread_title(thdname);
+    redisSetCpuAffinity(server.server_cpulist);
+    /* 设置线程可取消，使得当 Redis 服务器关闭时，能够快速退出线程并释放已申请的内存资源 */
+    makeThreadKillable();
+
+    while(1) {
+        /* Wait for start */
+        /* 这段代码通过一个简单的 for 循环，来轮询等待 I/O 任务队列是否有等待任务存在。
+         * 如果等待队列中存在任务，则立即退出循环，并开始处理等待队列中的客户端请求。
+         * 否则继续等待，直至超时或等待队列中出现请求任务才能被唤醒。 */ 
+        for (int j = 0; j < 1000000; j++) {
+            if (getIOPendingCount(id) != 0) break;
+        }
+
+        /* Give the main thread a chance to stop this thread. */
+        /* 如果要待处理的客户端数量为 0 */
+        if (getIOPendingCount(id) == 0) {
+            /* 阻塞在这里，等待主线程解锁去唤醒 */
+            pthread_mutex_lock(&io_threads_mutex[id]);
+            pthread_mutex_unlock(&io_threads_mutex[id]);
+            continue;
+        }
+
+        serverAssert(getIOPendingCount(id) != 0);
+
+        /* Process: note that the main thread will never touch our list
+         * before we drop the pending count to 0. */
+        listIter li;
+        listNode *ln;
+        /* 拿到线程分到的待处理客户端
+         * 处理过程中主线程不会访问这些客户端请求，因此无需考虑线程安全和同步问题
+         */
+        listRewind(io_threads_list[id],&li);
+        /* 不断取双端链表的节点直到取完 */
+        while((ln = listNext(&li))) {
+            /* 从客户端列表中获取一个客户端 */
+            client *c = listNodeValue(ln);
+            /* 线程是写操作，调用 writeToClient 将数据写回客户端 */
+            if (io_threads_op == IO_THREADS_OP_WRITE) {
+                writeToClient(c,0);
+            /* 如果是读操作，调用 readQueryFromClient 从客户端读数据 */    
+            } else if (io_threads_op == IO_THREADS_OP_READ) {
+                readQueryFromClient(c->conn);
+            } else {
+                serverPanic("io_threads_op value is unknown");
+            }
+        }
+        /* 处理完所有客户端，清空该线程的客户端列表 */
+        listEmpty(io_threads_list[id]);
+        /* 将该线程的待处理任务数量设为 0 */
+        setIOPendingCount(id, 0);
+    }
+}
+```
+
 ### initThreadedIO
 
 初始化多 IO 线程
@@ -226,6 +300,7 @@ void initThreadedIO(void) {
     for (int i = 0; i < server.io_threads_num; i++) {
         /* Things we do for all the threads including the main thread. */
         io_threads_list[i] = listCreate();
+        /* i == 0 表示主IO线程 */
         if (i == 0) continue; /* Thread 0 is the main thread. */
 
         /* Things we do only for the additional threads. */

@@ -75,3 +75,37 @@ list *listCreate(void)
 }
 
 ```
+
+### listRewind
+
+将迭代器li重置为链表list的头结点，并指定遍历方向为从头到尾
+
+```c
+/* Create an iterator in the list private iterator structure */
+void listRewind(list *list, listIter *li) {
+    li->next = list->head;
+    li->direction = AL_START_HEAD;
+}
+```
+
+### listNext
+
+让指定迭代器Iter向后移动一个位置，并返回移动后所在的节点指针
+
+```c
+listNode *listNext(listIter *iter)
+{
+    listNode *current = iter->next;
+
+    if (current != NULL) {
+        /* 如果迭代方向为从头到尾 */
+        if (iter->direction == AL_START_HEAD)
+            iter->next = current->next;
+        /* 迭代方向为从尾到头 */
+        else
+            iter->next = current->prev;
+    }
+    /* 返回当前所在的节点指针 */
+    return current;
+}
+```

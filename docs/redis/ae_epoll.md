@@ -75,8 +75,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     mask |= eventLoop->events[fd].mask; /* Merge old events */
     /* 设置感兴趣事件 
      * 可读事件
-     * 可写事件
-     */
+     * 可写事件 */
     if (mask & AE_READABLE) ee.events |= EPOLLIN;
     if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
     /* 赋值fd */
