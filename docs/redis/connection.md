@@ -1,5 +1,47 @@
 # connection
 
+## 头文件
+
+### ConnectionState
+
+```c
+typedef enum {
+    CONN_STATE_NONE = 0,
+    CONN_STATE_CONNECTING,  // connecting, 发起 connect 连接时
+    CONN_STATE_ACCEPTING,   // accepting, 创建客户端时初始状态，即 accept 之前的状态
+    CONN_STATE_CONNECTED,   // connected, 成功 accept 之后的状态
+    CONN_STATE_CLOSED,      // closed,    关闭的状态
+    CONN_STATE_ERROR        // error,     出错了
+} ConnectionState;
+```
+
+### connection
+
+```c
+struct connection {
+    /* 操作 connection 中的函数指针 */
+    ConnectionType *type;
+    /* 是一个 enum，表示连接的状态 */
+    ConnectionState state;
+    /* CONN_FLAG_CLOSE_SCHEDULED 或者 CONN_FLAG_WRITE_BARRIER */
+    short int flags;
+    /* 引用计数，控制着这个连接对象生命周期 */
+    short int refs;
+    /* 最近一次的错误类型 */
+    int last_errno;
+    /* 保存的是这个连接对应的客户端 client */
+    void *private_data;
+    /* 连接回调 */
+    ConnectionCallbackFunc conn_handler;
+    /* 写回调 */
+    ConnectionCallbackFunc write_handler;
+    /* 读回调 */
+    ConnectionCallbackFunc read_handler;
+    /* 连接对应的文件描述符 */
+    int fd;
+};
+```
+
 ## 方法
 
 ### connTypeInitialize
