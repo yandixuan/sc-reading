@@ -51,7 +51,9 @@ client *createClient(connection *conn) {
     c->ref_block_pos = 0;
     /* 当前querybuf缓冲区中已经被解析完毕的命令数据长度 */
     c->qb_pos = 0;
+    /* 动态字符串缓冲区，用来保存客户端发来的命令请求数据 */
     c->querybuf = sdsempty();
+    /* 客户端连接所使用的查询缓冲区 querybuf 的峰值大小（peak） */
     c->querybuf_peak = 0;
     /* 客户端发起的请求类型： Inline 和 MulitiBulk */
     c->reqtype = 0;
@@ -296,6 +298,402 @@ void acceptCommonHandler(connection *conn, int flags, char *ip) {
 }
 ```
 
+### processInlineBuffer
+
+处理`PROTO_REQ_INLINE`类型的协议报文(支持\n和\r\n作为协议的结束符标志)
+
+```c
+int processInlineBuffer(client *c) {
+    char *newline;
+    int argc, j, linefeed_chars = 1;
+    sds *argv, aux;
+    size_t querylen;
+
+    /* Search for end of line */
+    /* 从qb_pos位置开始在搜索请求缓冲区中第一个换行符的位置 */
+    newline = strchr(c->querybuf+c->qb_pos,'\n');
+
+    /* Nothing to do without a \r\n */
+    /* 如果没有找到，则返回错误 */
+    if (newline == NULL) {
+        /* 判断行协议请求的大小是否超过预设值 */
+        if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
+            /* 向客户端发送错误信息 */
+            addReplyError(c,"Protocol error: too big inline request");
+            /* 设置协议解析错误标记 */
+            setProtocolError("too big inline request",c);
+        }
+        return C_ERR;
+    }
+
+    /* Handle the \r\n case. */
+    /* 如果新行指针不是开头且前一个字符是回车符，则需要跳过回车符 */
+    if (newline != c->querybuf+c->qb_pos && *(newline-1) == '\r')
+        newline--, linefeed_chars++;
+
+    /* Split the input buffer up to the \r\n */
+    /* 算出缓冲区中尚未处理的数据的长度 */
+    querylen = newline-(c->querybuf+c->qb_pos);
+    /* 将上述长度的数据读出来 */
+    aux = sdsnewlen(c->querybuf+c->qb_pos,querylen);
+    /* 使用sdssplitargs分割为参数列表并保存在argv数组中 */
+    argv = sdssplitargs(aux,&argc);
+    sdsfree(aux);
+    if (argv == NULL) {
+        addReplyError(c,"Protocol error: unbalanced quotes in request");
+        setProtocolError("unbalanced quotes in inline request",c);
+        return C_ERR;
+    }
+
+    /* Newline from slaves can be used to refresh the last ACK time.
+     * This is useful for a slave to ping back while loading a big
+     * RDB file. */
+    /* 如果客户端类型是 SLAVE 并且请求长度为 0，则刷新最后确认时间戳 */
+    if (querylen == 0 && getClientType(c) == CLIENT_TYPE_SLAVE)
+        c->repl_ack_time = server.unixtime;
+
+    /* Masters should never send us inline protocol to run actual
+     * commands. If this happens, it is likely due to a bug in Redis where
+     * we got some desynchronization in the protocol, for example
+     * because of a PSYNC gone bad.
+     *
+     * However there is an exception: masters may send us just a newline
+     * to keep the connection active. */
+    if (querylen != 0 && c->flags & CLIENT_MASTER) {
+        sdsfreesplitres(argv,argc);
+        serverLog(LL_WARNING,"WARNING: Receiving inline protocol from master, master stream corruption? Closing the master connection and discarding the cached master.");
+        setProtocolError("Master using the inline protocol. Desync?",c);
+        return C_ERR;
+    }
+
+    /* Move querybuffer position to the next query in the buffer. */
+    /* 指向缓冲区下一个可以被写入的位置 */
+    c->qb_pos += querylen+linefeed_chars;
+
+    /* Setup argv array on client structure */
+    /* 释放原有的参数空间，再根据参数个数动态分配一个大小为 sizeof(robj*) * c->argv_len 的内存空间 */
+    if (argc) {
+        if (c->argv) zfree(c->argv);
+        c->argv_len = argc;
+        c->argv = zmalloc(sizeof(robj*)*c->argv_len);
+        c->argv_len_sum = 0;
+    }
+
+    /* Create redis objects for all arguments. */
+    /* 每个参数按照 OBJ_STRING 类型创建成 Redis 对象，并将该对象的地址保存在指针数组 c->argv 中 
+     * 累加所有参数长度得到参数长度总和并保存在 c->argv_len_sum 中 */
+    for (c->argc = 0, j = 0; j < argc; j++) {
+        c->argv[c->argc] = createObject(OBJ_STRING,argv[j]);
+        c->argc++;
+        c->argv_len_sum += sdslen(argv[j]);
+    }
+    /* 释放argv内存空间 */
+    zfree(argv);
+    return C_OK;
+}
+```
+
+### processMultibulkBuffer
+
+处理`PROTO_REQ_MULTIBULK`类型的协议报文
+
+```c
+int processMultibulkBuffer(client *c) {
+    char *newline = NULL;
+    int ok;
+    long long ll;
+
+    if (c->multibulklen == 0) {
+        /* The client should have been reset */
+        /* 如果 c->multibulklen 已经为 0，表示上一个 Multi-bulk 请求已经执行完成 */
+        serverAssertWithInfo(c,NULL,c->argc == 0);
+
+        /* Multi bulk length cannot be read without a \r\n */
+        /* 若当前未读到 \r，说明请求数据不完整或格式错误 */
+        newline = strchr(c->querybuf+c->qb_pos,'\r');
+        if (newline == NULL) {
+            if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
+                addReplyError(c,"Protocol error: too big mbulk count string");
+                setProtocolError("too big mbulk count string",c);
+            }
+            return C_ERR;
+        }
+
+        /* Buffer should also contain \n */
+        /* Redis命令请求数据是否符合协议格式，若不符合则直接返回错误
+         * newline 是一个指向 c 中请求数据中第一个回车符 \r 的指针
+         * newline - (c->querybuf + c->qb_pos) 表示已经读取的命令请求数据长度
+         * sdslen(c->querybuf) - c->qb_pos - 2 即为整个命令请求数据剩余未读的长度
+         * 假设newline指向命令的最后一个\r，已经读取的请求数据长度和尚未读取的数据长度之和等于整个命令请求数据的长度 */
+        if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
+            return C_ERR;
+
+        /* We know for sure there is a whole line since newline != NULL,
+         * so go ahead and find out the multi bulk length. */
+        /* 断言当前读取的数据块的第一个字符必须是 *，即 Multi-bulk 请求的开头，
+         * 如果不是则表示协议解析错误，会触发服务器内部的断言机制，导致进程异常终止以避免后续程序出现错误 */ 
+        serverAssertWithInfo(c,NULL,c->querybuf[c->qb_pos] == '*');
+        /* 字符串转long long 类型，成功返回1
+         * c->querybuf+1+c->qb_pos：指向请求消息参数的指针（+1是为了跳过*号）
+         * newline-(c->querybuf+1+c->qb_pos)：表示请求消息参数的长度（+1是为了跳过*号）
+         * &ll：long long 类型的指针变量，用于存储解析后得到的结果 
+         * eg: *2\r\n$4\r\nkey1\r\n$4\r\nval1\r\n*2\r\n$4\r\nkey2\r\n$4\r\nval2\r\n
+         * 这里ll得到的是参数数量 */
+        ok = string2ll(c->querybuf+1+c->qb_pos,newline-(c->querybuf+1+c->qb_pos),&ll);
+        if (!ok || ll > INT_MAX) {
+            /* 如果无法读取参数数量或读到的数量超过偏移量上限 INT_MAX，返回错误并断开连接 */
+            addReplyError(c,"Protocol error: invalid multibulk length");
+            setProtocolError("invalid mbulk count",c);
+            return C_ERR;
+        } else if (ll > 10 && authRequired(c)) {
+            /* 如果当前连接需要进行身份验证，并且收到的参数数量太多（>10），则拒绝执行该请求 */
+            addReplyError(c, "Protocol error: unauthenticated multibulk length");
+            setProtocolError("unauth mbulk count", c);
+            return C_ERR;
+        }
+        /* 更新指针位置，指向下一个参数 */
+        c->qb_pos = (newline-c->querybuf)+2;
+        /* 如果参数数量为 0，直接跳过后续操作 */
+        if (ll <= 0) return C_OK;
+        /* 将参数数量保存至客户端状态结构体 c 中，准备开始处理 Multi-bulk 命令的参数 */
+        c->multibulklen = ll;
+
+        /* Setup argv array on client structure */
+        /* 初始化 argv 数组 */
+        if (c->argv) zfree(c->argv);
+        /* 设置最多可处理的参数数量上限，避免参数过多导致内存占用过大 */
+        c->argv_len = min(c->multibulklen, 1024);
+        /* 分配 argv 数组 */
+        c->argv = zmalloc(sizeof(robj*)*c->argv_len);
+        /* 初始化命令参数的总长度 */
+        c->argv_len_sum = 0;
+    }
+
+    serverAssertWithInfo(c,NULL,c->multibulklen > 0);
+    while(c->multibulklen) {
+        /* Read bulk length if unknown */
+        if (c->bulklen == -1) {
+            newline = strchr(c->querybuf+c->qb_pos,'\r');
+            if (newline == NULL) {
+                if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
+                    addReplyError(c,
+                        "Protocol error: too big bulk count string");
+                    setProtocolError("too big bulk count string",c);
+                    return C_ERR;
+                }
+                break;
+            }
+
+            /* Buffer should also contain \n */
+            if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
+                break;
+
+            if (c->querybuf[c->qb_pos] != '$') {
+                addReplyErrorFormat(c,
+                    "Protocol error: expected '$', got '%c'",
+                    c->querybuf[c->qb_pos]);
+                setProtocolError("expected $ but got something else",c);
+                return C_ERR;
+            }
+
+            ok = string2ll(c->querybuf+c->qb_pos+1,newline-(c->querybuf+c->qb_pos+1),&ll);
+            if (!ok || ll < 0 ||
+                (!(c->flags & CLIENT_MASTER) && ll > server.proto_max_bulk_len)) {
+                addReplyError(c,"Protocol error: invalid bulk length");
+                setProtocolError("invalid bulk length",c);
+                return C_ERR;
+            } else if (ll > 16384 && authRequired(c)) {
+                addReplyError(c, "Protocol error: unauthenticated bulk length");
+                setProtocolError("unauth bulk length", c);
+                return C_ERR;
+            }
+
+            c->qb_pos = newline-c->querybuf+2;
+            if (!(c->flags & CLIENT_MASTER) && ll >= PROTO_MBULK_BIG_ARG) {
+                /* When the client is not a master client (because master
+                 * client's querybuf can only be trimmed after data applied
+                 * and sent to replicas).
+                 *
+                 * If we are going to read a large object from network
+                 * try to make it likely that it will start at c->querybuf
+                 * boundary so that we can optimize object creation
+                 * avoiding a large copy of data.
+                 *
+                 * But only when the data we have not parsed is less than
+                 * or equal to ll+2. If the data length is greater than
+                 * ll+2, trimming querybuf is just a waste of time, because
+                 * at this time the querybuf contains not only our bulk. */
+                if (sdslen(c->querybuf)-c->qb_pos <= (size_t)ll+2) {
+                    sdsrange(c->querybuf,c->qb_pos,-1);
+                    c->qb_pos = 0;
+                    /* Hint the sds library about the amount of bytes this string is
+                     * going to contain. */
+                    c->querybuf = sdsMakeRoomForNonGreedy(c->querybuf,ll+2-sdslen(c->querybuf));
+                    /* We later set the peak to the used portion of the buffer, but here we over
+                     * allocated because we know what we need, make sure it'll not be shrunk before used. */
+                    if (c->querybuf_peak < (size_t)ll + 2) c->querybuf_peak = ll + 2;
+                }
+            }
+            c->bulklen = ll;
+        }
+
+        /* Read bulk argument */
+        if (sdslen(c->querybuf)-c->qb_pos < (size_t)(c->bulklen+2)) {
+            /* Not enough data (+2 == trailing \r\n) */
+            break;
+        } else {
+            /* Check if we have space in argv, grow if needed */
+            if (c->argc >= c->argv_len) {
+                c->argv_len = min(c->argv_len < INT_MAX/2 ? c->argv_len*2 : INT_MAX, c->argc+c->multibulklen);
+                c->argv = zrealloc(c->argv, sizeof(robj*)*c->argv_len);
+            }
+
+            /* Optimization: if a non-master client's buffer contains JUST our bulk element
+             * instead of creating a new object by *copying* the sds we
+             * just use the current sds string. */
+            if (!(c->flags & CLIENT_MASTER) &&
+                c->qb_pos == 0 &&
+                c->bulklen >= PROTO_MBULK_BIG_ARG &&
+                sdslen(c->querybuf) == (size_t)(c->bulklen+2))
+            {
+                c->argv[c->argc++] = createObject(OBJ_STRING,c->querybuf);
+                c->argv_len_sum += c->bulklen;
+                sdsIncrLen(c->querybuf,-2); /* remove CRLF */
+                /* Assume that if we saw a fat argument we'll see another one
+                 * likely... */
+                c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2);
+                sdsclear(c->querybuf);
+            } else {
+                c->argv[c->argc++] =
+                    createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+                c->argv_len_sum += c->bulklen;
+                c->qb_pos += c->bulklen+2;
+            }
+            c->bulklen = -1;
+            c->multibulklen--;
+        }
+    }
+
+    /* We're done when c->multibulk == 0 */
+    if (c->multibulklen == 0) return C_OK;
+
+    /* Still not ready to process the command */
+    return C_ERR;
+}
+```
+
+### processInputBuffer
+
+表示是否处于执行某个长时间命令的状态
+
+```c
+int processInputBuffer(client *c) {
+    /* Keep processing while there is something in the input buffer */
+    /* 遍历客户端输入缓冲区 */
+    while(c->qb_pos < sdslen(c->querybuf)) {
+        /* Immediately abort if the client is in the middle of something. */
+        /* 客户端处于阻塞状态，直接退出循环，例如 BLPOP、BRPOP、BRPOPLPUSH 等 */
+        if (c->flags & CLIENT_BLOCKED) break;
+
+        /* Don't process more buffers from clients that have already pending
+         * commands to execute in c->argv. */
+        /* 判断当前客户端处于等待执行命令的状态，直接退出循环 */ 
+        if (c->flags & CLIENT_PENDING_COMMAND) break;
+
+        /* Don't process input from the master while there is a busy script
+         * condition on the slave. We want just to accumulate the replication
+         * stream (instead of replying -BUSY like we do with other clients) and
+         * later resume the processing. */
+        /* 如果当前客户端既满足执行某个长时间命令的条件，又满足是主节点的条件，则跳出循环 */ 
+        if (isInsideYieldingLongCommand() && c->flags & CLIENT_MASTER) break;
+
+        /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
+         * written to the client. Make sure to not let the reply grow after
+         * this flag has been set (i.e. don't process more commands).
+         *
+         * The same applies for clients we want to terminate ASAP. */
+        /* 客户端请求要求在回复之后立即关闭连接，直接退出循环 */ 
+        if (c->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
+
+        /* Determine request type when unknown. */
+        /* 确定请求类型 */
+        if (!c->reqtype) {
+            if (c->querybuf[c->qb_pos] == '*') {
+                /* 多条批量协议 */
+                c->reqtype = PROTO_REQ_MULTIBULK;
+            } else {
+                /* 单行协议 */
+                c->reqtype = PROTO_REQ_INLINE;
+            }
+        }
+        /* 根据不同的客户端请求类型，这里会分别调用 processInlineBuffer() 或者 processMultibulkBuffer()来处理输入缓冲区中存储的命令请求
+         * 如果返回值为 C_OK 则继续执行，否则退出当前循环
+         */
+        if (c->reqtype == PROTO_REQ_INLINE) {
+            if (processInlineBuffer(c) != C_OK) break;
+        } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
+            if (processMultibulkBuffer(c) != C_OK) break;
+        } else {
+            serverPanic("Unknown request type");
+        }
+
+        /* Multibulk processing could see a <= 0 length. */
+        if (c->argc == 0) {
+            resetClient(c);
+        } else {
+            /* If we are in the context of an I/O thread, we can't really
+             * execute the command here. All we can do is to flag the client
+             * as one that needs to process the command. */
+            if (io_threads_op != IO_THREADS_OP_IDLE) {
+                serverAssert(io_threads_op == IO_THREADS_OP_READ);
+                c->flags |= CLIENT_PENDING_COMMAND;
+                break;
+            }
+
+            /* We are finally ready to execute the command. */
+            if (processCommandAndResetClient(c) == C_ERR) {
+                /* If the client is no longer valid, we avoid exiting this
+                 * loop and trimming the client buffer later. So we return
+                 * ASAP in that case. */
+                return C_ERR;
+            }
+        }
+    }
+
+    if (c->flags & CLIENT_MASTER) {
+        /* If the client is a master, trim the querybuf to repl_applied,
+         * since master client is very special, its querybuf not only
+         * used to parse command, but also proxy to sub-replicas.
+         *
+         * Here are some scenarios we cannot trim to qb_pos:
+         * 1. we don't receive complete command from master
+         * 2. master client blocked cause of client pause
+         * 3. io threads operate read, master client flagged with CLIENT_PENDING_COMMAND
+         *
+         * In these scenarios, qb_pos points to the part of the current command
+         * or the beginning of next command, and the current command is not applied yet,
+         * so the repl_applied is not equal to qb_pos. */
+        if (c->repl_applied) {
+            sdsrange(c->querybuf,c->repl_applied,-1);
+            c->qb_pos -= c->repl_applied;
+            c->repl_applied = 0;
+        }
+    } else if (c->qb_pos) {
+        /* Trim to pos */
+        sdsrange(c->querybuf,c->qb_pos,-1);
+        c->qb_pos = 0;
+    }
+
+    /* Update client memory usage after processing the query buffer, this is
+     * important in case the query buffer is big and wasn't drained during
+     * the above loop (because of partially sent big commands). */
+    if (io_threads_op == IO_THREADS_OP_IDLE)
+        updateClientMemUsageAndBucket(c);
+
+    return C_OK;
+}
+```
+
 ### readQueryFromClient
 
 读取客户端发送的请求命令的函数
@@ -334,7 +732,7 @@ void readQueryFromClient(connection *conn) {
     if (c->reqtype == PROTO_REQ_MULTIBULK && c->multibulklen && c->bulklen != -1
         && c->bulklen >= PROTO_MBULK_BIG_ARG)
     {   
-        /* 检查当前读取的bulk参数是否已经读取完毕 */
+        /* 检查当前读取的bulk参数是否已经读取完毕，没有则返回剩余长度 */
         ssize_t remaining = (size_t)(c->bulklen+2)-(sdslen(c->querybuf)-c->qb_pos);
         big_arg = 1;
 
@@ -344,16 +742,14 @@ void readQueryFromClient(connection *conn) {
 
         /* Master client needs expand the readlen when meet BIG_ARG(see #9100),
          * but doesn't need align to the next arg, we can read more data. */
-        /* 客户端连接对象c的属性flags中是否包含CLIENT_MASTER标志位。若包含，
-         * 则说明当前连接是一个master节点与slave节点之间的连接，可以看作是一个长连接 
-         * 若小于，则说明当前读取缓存的空间不足以容纳一条完整的命令请求数据，需要进行扩容。
-         * 将readlen的长度设置为PROTO_IOBUF_LEN。该操作保证了每次读取的数据长度至少为PROTO_IOBUF_LEN，
-         * 可以避免因待读取的数据过长而导致的读取缓存溢出问题。 */ 
+        /* 设置主节点客户端的最小读取长度。当通信协议为 Redis 主从复制协议并且从客户端所读取的数据长度小于 PROTO_IOBUF_LEN 时，
+         * 服务器将强制从主节点读取的最小数据长度设置为PROTO_IOBUF_LEN，服务器将把必要数据都以 PROTO_IOBUF_LEN 的长度一次性返回给从节点，提高网络带宽的利用率 */
         if (c->flags & CLIENT_MASTER && readlen < PROTO_IOBUF_LEN)
             readlen = PROTO_IOBUF_LEN;
     }
-
+    /* 获取当前输入缓存区的长度 */
     qblen = sdslen(c->querybuf);
+    /* 如果读取长度较小且不是master节点客户端，则会使用非贪心型的缓存扩容方法sdsMakeRoomForNonGreedy，即只为缓存分配恰好所需的空间 */
     if (!(c->flags & CLIENT_MASTER) && // master client's querybuf can grow greedy.
         (big_arg || sdsalloc(c->querybuf) < PROTO_IOBUF_LEN)) {
         /* When reading a BIG_ARG we won't be reading more than that one arg
@@ -364,23 +760,31 @@ void readQueryFromClient(connection *conn) {
         c->querybuf = sdsMakeRoomForNonGreedy(c->querybuf, readlen);
         /* We later set the peak to the used portion of the buffer, but here we over
          * allocated because we know what we need, make sure it'll not be shrunk before used. */
+        /* 如果当前查询缓冲区的峰值比读取长度（即 readlen）和当前查询缓冲区长度之和小，则认为当前查询缓冲区的峰值便是二者之和。 */
         if (c->querybuf_peak < qblen + readlen) c->querybuf_peak = qblen + readlen;
     } else {
+        /* 贪婪模式，会扩容成（现有长度+readlen）的2倍 */
         c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
 
         /* Read as much as possible from the socket to save read(2) system calls. */
+        /* 这里尽量从套接字 socket 中一次性读取尽可能多的数据以避免频繁的 I/O 系统调用提高程序效率  */
         readlen = sdsavail(c->querybuf);
     }
+    /* 从连接（对应socket或unix中的read方法）中读取数据，并存储到客户端的查询缓冲区，返回实际读取的数据长度
+     * qblen 是当前查询缓冲区中已有的数据长度，readlen 则是要从连接中最多读取的数据长度，nread 表示实际读取的数据长度 */
     nread = connRead(c->conn, c->querybuf+qblen, readlen);
+    /* 如果返回 -1 表示发生了错误 */
     if (nread == -1) {
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
             return;
         } else {
+            /* 客户端状态不为已连接则释放客户端以关闭连接 */
             serverLog(LL_VERBOSE, "Reading from client: %s",connGetLastError(c->conn));
             freeClientAsync(c);
             goto done;
         }
     } else if (nread == 0) {
+        /* 如果 nread 的值为 0，表示收到了一个空数据包（EOF），输出日志信息，并将客户端对象进行释放以关闭连接 */
         if (server.verbosity <= LL_VERBOSE) {
             sds info = catClientInfoString(sdsempty(), c);
             serverLog(LL_VERBOSE, "Client closed connection %s", info);
@@ -389,19 +793,22 @@ void readQueryFromClient(connection *conn) {
         freeClientAsync(c);
         goto done;
     }
-
+    /* 调整查询缓冲区的长度 */
     sdsIncrLen(c->querybuf,nread);
+    /* 返回缓存区的数据长度 */
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
-
+    /* 记录最新的交互时间 */
     c->lastinteraction = server.unixtime;
+    /* 客户端标识判断是否累加网络输入流量 */
     if (c->flags & CLIENT_MASTER) {
         c->read_reploff += nread;
         atomicIncr(server.stat_net_repl_input_bytes, nread);
     } else {
         atomicIncr(server.stat_net_input_bytes, nread);
     }
-
+    /* 如果不是主节点 CLIENT_MASTER 且 querybuf 的长度超过了 server.client_max_querybuf_len变量定义的阈值，
+     * 则会记录一些信息（client info 和一部分内容），输出警告日志并关闭该客户端连接 */
     if (!(c->flags & CLIENT_MASTER) && sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
 
@@ -415,10 +822,12 @@ void readQueryFromClient(connection *conn) {
 
     /* There is more data in the client input buffer, continue parsing it
      * and check if there is a full command to execute. */
+    /* 尝试是否能解析一个完整的命令出来 */ 
     if (processInputBuffer(c) == C_ERR)
          c = NULL;
 
 done:
+    /* 处理下一个客户端 */
     beforeNextClient(c);
 }
 ```

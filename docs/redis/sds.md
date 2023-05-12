@@ -2,7 +2,7 @@
 
 [参考](https://juejin.cn/post/6980974661664407582#heading-7)
 
-## 头部声明文件
+## 头文件
 
 ```c
 #ifndef __SDS_H
@@ -603,6 +603,58 @@ sds sdsResize(sds s, size_t size, int would_regrow) {
     sdssetalloc(s, size);
     // 返回buf地址指针
     return s;
+}
+```
+
+### sdsIncrLen
+
+调整SDS字符串的数据长度即sds->len
+
+```c
+void sdsIncrLen(sds s, ssize_t incr) {
+    /* 获取sds的flag */
+    unsigned char flags = s[-1];
+    size_t len;
+    /* 不同的SDS类型，走不同的分支 */
+    switch(flags&SDS_TYPE_MASK) {
+        case SDS_TYPE_5: {
+            unsigned char *fp = ((unsigned char*)s)-1;
+            unsigned char oldlen = SDS_TYPE_5_LEN(flags);
+            assert((incr > 0 && oldlen+incr < 32) || (incr < 0 && oldlen >= (unsigned int)(-incr)));
+            *fp = SDS_TYPE_5 | ((oldlen+incr) << SDS_TYPE_BITS);
+            len = oldlen+incr;
+            break;
+        }
+        case SDS_TYPE_8: {
+            /* SDS 对象头的指针 */
+            SDS_HDR_VAR(8,s);
+            /* 保证增加的长度或减少的长度不超过 */
+            assert((incr >= 0 && sh->alloc-sh->len >= incr) || (incr < 0 && sh->len >= (unsigned int)(-incr)));
+            len = (sh->len += incr);
+            break;
+        }
+        case SDS_TYPE_16: {
+            SDS_HDR_VAR(16,s);
+            assert((incr >= 0 && sh->alloc-sh->len >= incr) || (incr < 0 && sh->len >= (unsigned int)(-incr)));
+            len = (sh->len += incr);
+            break;
+        }
+        case SDS_TYPE_32: {
+            SDS_HDR_VAR(32,s);
+            assert((incr >= 0 && sh->alloc-sh->len >= (unsigned int)incr) || (incr < 0 && sh->len >= (unsigned int)(-incr)));
+            len = (sh->len += incr);
+            break;
+        }
+        case SDS_TYPE_64: {
+            SDS_HDR_VAR(64,s);
+            assert((incr >= 0 && sh->alloc-sh->len >= (uint64_t)incr) || (incr < 0 && sh->len >= (uint64_t)(-incr)));
+            len = (sh->len += incr);
+            break;
+        }
+        default: len = 0; /* Just to avoid compilation warnings. */
+    }
+    /* 设置新的 null byte，标记字符串结束 */
+    s[len] = '\0';
 }
 ```
 
