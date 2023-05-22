@@ -420,11 +420,7 @@ int processMultibulkBuffer(client *c) {
         }
 
         /* Buffer should also contain \n */
-        /* Redis命令请求数据是否符合协议格式，若不符合则直接返回错误
-         * newline 是一个指向 c 中请求数据中第一个回车符 \r 的指针
-         * newline - (c->querybuf + c->qb_pos) 表示已经读取的命令请求数据长度
-         * sdslen(c->querybuf) - c->qb_pos - 2 即为整个命令请求数据剩余未读的长度
-         * 假设newline指向命令的最后一个\r，已经读取的请求数据长度和尚未读取的数据长度之和等于整个命令请求数据的长度 */
+        /* 如果成立则没有读到\n，即当前参数值是不完整的，等待客户端继续发送数据 */
         if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
             return C_ERR;
 
@@ -434,11 +430,8 @@ int processMultibulkBuffer(client *c) {
          * 如果不是则表示协议解析错误，会触发服务器内部的断言机制，导致进程异常终止以避免后续程序出现错误 */ 
         serverAssertWithInfo(c,NULL,c->querybuf[c->qb_pos] == '*');
         /* 字符串转long long 类型，成功返回1
-         * c->querybuf+1+c->qb_pos：指向请求消息参数的指针（+1是为了跳过*号）
-         * newline-(c->querybuf+1+c->qb_pos)：表示请求消息参数的长度（+1是为了跳过*号）
-         * &ll：long long 类型的指针变量，用于存储解析后得到的结果 
          * eg: *2\r\n$4\r\nkey1\r\n$4\r\nval1\r\n*2\r\n$4\r\nkey2\r\n$4\r\nval2\r\n
-         * 这里ll得到的是参数数量 */
+         * 这里ll得到的是参数的个数 */
         ok = string2ll(c->querybuf+1+c->qb_pos,newline-(c->querybuf+1+c->qb_pos),&ll);
         if (!ok || ll > INT_MAX) {
             /* 如果无法读取参数数量或读到的数量超过偏移量上限 INT_MAX，返回错误并断开连接 */
@@ -468,11 +461,13 @@ int processMultibulkBuffer(client *c) {
         /* 初始化命令参数的总长度 */
         c->argv_len_sum = 0;
     }
-
+    /* multibulklen必须大于0，不然报文有问题 */
     serverAssertWithInfo(c,NULL,c->multibulklen > 0);
     while(c->multibulklen) {
         /* Read bulk length if unknown */
+        /* 如果 bulklen 为 -1，则表明目前并不知道下一个参数的长度是多少，需要先读取长度信息。*/
         if (c->bulklen == -1) {
+            /* 从qb_pos位置搜索最近的'\r' */
             newline = strchr(c->querybuf+c->qb_pos,'\r');
             if (newline == NULL) {
                 if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
@@ -485,9 +480,10 @@ int processMultibulkBuffer(client *c) {
             }
 
             /* Buffer should also contain \n */
+            /* 如果成立则没有读到\n，即当前参数值是不完整的，跳出循环等待客户端继续发送数据 */
             if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
                 break;
-
+            /* 第一个字符必须是$，如果不是则表明这里出现了协议解析错误，并停止请求处理。 */
             if (c->querybuf[c->qb_pos] != '$') {
                 addReplyErrorFormat(c,
                     "Protocol error: expected '$', got '%c'",
@@ -495,20 +491,24 @@ int processMultibulkBuffer(client *c) {
                 setProtocolError("expected $ but got something else",c);
                 return C_ERR;
             }
-
+            /* 读到参数长度，转成long long类型 */
             ok = string2ll(c->querybuf+c->qb_pos+1,newline-(c->querybuf+c->qb_pos+1),&ll);
+            /* 如果参数长度不是整数或小于 0，或者大于了 server.proto_max_bulk_len 控制流程会进入其中，Redis 服务器调用了 addReplyError 函数发送错误响应信息，并设置一个全局的 client 状态变量来通知客户端连接发生了协议错误 */
             if (!ok || ll < 0 ||
                 (!(c->flags & CLIENT_MASTER) && ll > server.proto_max_bulk_len)) {
                 addReplyError(c,"Protocol error: invalid bulk length");
                 setProtocolError("invalid bulk length",c);
                 return C_ERR;
             } else if (ll > 16384 && authRequired(c)) {
+                /* 如果该参数值的长度超过了服务端允许的最大值（16384）且当前客户端连接没有进行身份验证，就返回错误信息并中断解析流程，同样设置一个全局的 client 状态变量。 */
                 addReplyError(c, "Protocol error: unauthenticated bulk length");
                 setProtocolError("unauth bulk length", c);
                 return C_ERR;
             }
-
+            /* 参数读到了，更新qb_pos（已读取数据）位置 */
             c->qb_pos = newline-c->querybuf+2;
+            /* 如果 ll 大于等于 PROTO_MBULK_BIG_ARG(32KB)并且当前客户端不是 master 接入端
+             * 对客户端输入缓冲区 querybuf 进行一些优化处理 */
             if (!(c->flags & CLIENT_MASTER) && ll >= PROTO_MBULK_BIG_ARG) {
                 /* When the client is not a master client (because master
                  * client's querybuf can only be trimmed after data applied
@@ -523,6 +523,9 @@ int processMultibulkBuffer(client *c) {
                  * or equal to ll+2. If the data length is greater than
                  * ll+2, trimming querybuf is just a waste of time, because
                  * at this time the querybuf contains not only our bulk. */
+                /* 如果剩余待解析数据还没有被截掉并且小于或等于 ll+2（+2 表示回车符和换行符的长度），则需要对 querybuf 进行一些优化操作。
+                 * 这个判别条件主要应该是为了判断是否应该把 bulk 值移动到 querybuf 缓冲区的起始位置以达到内存整理的目的，
+                 * 因为 Redis 的 bulk 值一般都是存储在单独的一个 dictEntry 中的。*/ 
                 if (sdslen(c->querybuf)-c->qb_pos <= (size_t)ll+2) {
                     sdsrange(c->querybuf,c->qb_pos,-1);
                     c->qb_pos = 0;
@@ -531,18 +534,23 @@ int processMultibulkBuffer(client *c) {
                     c->querybuf = sdsMakeRoomForNonGreedy(c->querybuf,ll+2-sdslen(c->querybuf));
                     /* We later set the peak to the used portion of the buffer, but here we over
                      * allocated because we know what we need, make sure it'll not be shrunk before used. */
+                    /* 设置新的数据长度占用峰值 */ 
                     if (c->querybuf_peak < (size_t)ll + 2) c->querybuf_peak = ll + 2;
                 }
             }
+            /* 解析出来的 bulk 值数值赋值给 bulklen 变量，表示完成了这个 bulk string 参数值的解析 */
             c->bulklen = ll;
         }
 
         /* Read bulk argument */
+        /* 首先检查当前缓冲区是否已经包含完整的某一个 bulk string 参数值，如果数据不足和回车换行符 \r\n 的长度之和小于 bulklen，
+         * 说明这个参数字符串并未完整传输完，所以直接跳出循环等待下一次读入更多数据 */
         if (sdslen(c->querybuf)-c->qb_pos < (size_t)(c->bulklen+2)) {
             /* Not enough data (+2 == trailing \r\n) */
             break;
         } else {
             /* Check if we have space in argv, grow if needed */
+            /* 检查参数数组 argv 中是否还有空间存放新的参数对象，如果没有，则对数组进行扩充 */
             if (c->argc >= c->argv_len) {
                 c->argv_len = min(c->argv_len < INT_MAX/2 ? c->argv_len*2 : INT_MAX, c->argc+c->multibulklen);
                 c->argv = zrealloc(c->argv, sizeof(robj*)*c->argv_len);
@@ -551,6 +559,9 @@ int processMultibulkBuffer(client *c) {
             /* Optimization: if a non-master client's buffer contains JUST our bulk element
              * instead of creating a new object by *copying* the sds we
              * just use the current sds string. */
+            /* 如果当前连接是非master客户端且当前bulk string参数数据所在的querybuf压根没有被裁剪过（即 querybuf 游标 qb_pos==0）
+             * 而且当前待解析的 bulk 参数值长度超过 PROTO_MBULK_BIG_ARG（一个常量，表示最大可处理的 bulk 参数大小） 而且整个缓冲区都被数据封住，
+             * 即缓冲区长度为 bulklen + 2，则可以直接将 querybuf 本身作为 bulk string 参数值对象。这个优化的目的是避免无意义的内存拷贝操作。*/ 
             if (!(c->flags & CLIENT_MASTER) &&
                 c->qb_pos == 0 &&
                 c->bulklen >= PROTO_MBULK_BIG_ARG &&
@@ -564,21 +575,65 @@ int processMultibulkBuffer(client *c) {
                 c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2);
                 sdsclear(c->querybuf);
             } else {
+                /* 随后更新下一次如何寻找待解析数据的位置，也就是将游标向前移动到下一个 bulk 参数的开始位置（+2 表示要跳过该参数最后的回车与换行符） */
                 c->argv[c->argc++] =
                     createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+                /* 叠加参数内容的长度和 */
                 c->argv_len_sum += c->bulklen;
                 c->qb_pos += c->bulklen+2;
             }
+            /* 最后清空 bulklen 变量并减少记录还需要解析的 bulk 值得个数 */
             c->bulklen = -1;
             c->multibulklen--;
         }
     }
 
     /* We're done when c->multibulk == 0 */
+    /* multibulk协议报文解析完成，返回C_OK */
     if (c->multibulklen == 0) return C_OK;
 
     /* Still not ready to process the command */
+    /* 仍然不足以解析完整的命令 */
     return C_ERR;
+}
+```
+
+### processCommandAndResetClient
+
+```c
+int processCommandAndResetClient(client *c) {
+    /* 客户端是否断开连接的标志位 */
+    int deadclient = 0;
+    /* 一个客户端的请求在处理的过程中有可能被中断或者暂停，并切换到另一个客户端的请求
+     * 保存当前处理的客户端 c 并将其赋值给 old_client */
+    client *old_client = server.current_client;
+    /* 设定 Redis 当前操作的客户端为指向 c 的指针 */
+    server.current_client = c;
+    /* 调用 processCommand 处理客户端发送的命令，并检查其返回值 */
+    if (processCommand(c) == C_OK) {
+        /* 标记命令已经被处理 */
+        commandProcessed(c);
+        /* Update the client's memory to include output buffer growth following the
+         * processed command. */
+        /* 更新客户端内存使用率和输出缓冲区大小 */ 
+        updateClientMemUsageAndBucket(c);
+    }
+    /* 如果服务端当前没有正在处理的客户端，则表示客户端异常终止 */
+    if (server.current_client == NULL) deadclient = 1;
+    /*
+     * Restore the old client, this is needed because when a script
+     * times out, we will get into this code from processEventsWhileBlocked.
+     * Which will cause to set the server.current_client. If not restored
+     * we will return 1 to our caller which will falsely indicate the client
+     * is dead and will stop reading from its buffer.
+     */
+    /* 恢复原来的客户端 */ 
+    server.current_client = old_client;
+    /* performEvictions may flush slave output buffers. This may
+     * result in a slave, that may be the active client, to be
+     * freed. */
+    /*  如果客户端断开连接，则返回 C_ERR；否则返回 C_OK */ 
+    return deadclient ? C_ERR : C_OK;
 }
 ```
 
@@ -626,24 +681,29 @@ int processInputBuffer(client *c) {
                 c->reqtype = PROTO_REQ_INLINE;
             }
         }
-        /* 根据不同的客户端请求类型，这里会分别调用 processInlineBuffer() 或者 processMultibulkBuffer()来处理输入缓冲区中存储的命令请求
-         * 如果返回值为 C_OK 则继续执行，否则退出当前循环
-         */
+        /* 根据不同的客户端请求类型，这里会分别调用processInlineBuffer或者processMultibulkBuffer来处理输入缓冲区中存储的命令请求
+         * 如果返回值为 C_OK 则继续执行，否则退出当前循环说明还不能够解析出一条完整的命令 */
         if (c->reqtype == PROTO_REQ_INLINE) {
             if (processInlineBuffer(c) != C_OK) break;
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
             if (processMultibulkBuffer(c) != C_OK) break;
         } else {
+            /* 未知的协议类型 */
             serverPanic("Unknown request type");
         }
 
         /* Multibulk processing could see a <= 0 length. */
+        /* 如果当前请求中没有合法参数，即 argc 为0，则重置客户端状态并开始等待下一次读取数据 */
         if (c->argc == 0) {
             resetClient(c);
         } else {
             /* If we are in the context of an I/O thread, we can't really
              * execute the command here. All we can do is to flag the client
              * as one that needs to process the command. */
+            /* 如果 io_threads_op 为非空闲状态，即 I/O 线程正在进行异步网络 I/O 操作，此时主线程不应该执行命令
+             * 如果主线执行可能导致，命令重复执行、资源竞争导致死锁、数据出错
+             * 为了避免这些问题，主线程在 I/O 线程工作期间不应该执行命令。而是应该先将客户端请求加入到任务队列中，等待 I/O 线程异步处理完毕后再执行响应的回调函数，
+             * 避免数据的重复操作和并发访问问题。这样可以确保 Redis 实例的正确性，并提高整个系统的并发处理效率 */
             if (io_threads_op != IO_THREADS_OP_IDLE) {
                 serverAssert(io_threads_op == IO_THREADS_OP_READ);
                 c->flags |= CLIENT_PENDING_COMMAND;
@@ -651,6 +711,7 @@ int processInputBuffer(client *c) {
             }
 
             /* We are finally ready to execute the command. */
+            /* 执行命令 */
             if (processCommandAndResetClient(c) == C_ERR) {
                 /* If the client is no longer valid, we avoid exiting this
                  * loop and trimming the client buffer later. So we return
