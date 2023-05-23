@@ -1,8 +1,6 @@
 # Future
 
-因为`java.util.concurrent.Future`缺少对结果的监听(观察者模式)、任务是否成功、任务是否能被取消、异常原因
-
-因此 Netty 扩展了Jdk的Future
+因为`java.util.concurrent.Future`缺少对结果的监听(观察者模式)、任务是否成功、任务是否能被取消、异常原因，所以 Netty 扩展了Jdk的Future
 
 ```java
 public interface Future<V> extends java.util.concurrent.Future<V> {

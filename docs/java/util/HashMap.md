@@ -45,7 +45,7 @@ with a parameter of about 0.5 on average for the default resizing threshold of 0
 
 - 这一段注释的内容和目的都是为了解释在 java8 HashMap 中引入 Tree Bin（也就是放入数据的每个数组 bin 从链表 node 转换为 red-black tree node）的原因
 
-```text
+```txt
 举个例子说明，HashMap默认的table[].length=16，在长度为16的HashMap中放入12（0.75*length）个数据，某一个bin中存放了8个节点的概率是0.00000006
 - 扩容一次，16*2=32，在长度为32的HashMap中放入24个数据，某一个bin中存放了8个节点的概率是0.00000006
 - 再扩容一次，32*2=64，在长度为64的HashMap中放入48个数据，某一个bin中存放了8个节点的概率是0.00000006

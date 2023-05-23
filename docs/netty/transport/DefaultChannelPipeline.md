@@ -1,6 +1,6 @@
 # DefaultChannelPipeline
 
-[netty入门之inbound &outbound](./https://zhuanlan.zhihu.com/p/334326729)
+[netty入门之inbound &outbound](https://zhuanlan.zhihu.com/p/334326729)
 
 ## 方法
 

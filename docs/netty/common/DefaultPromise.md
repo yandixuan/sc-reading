@@ -11,7 +11,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 可以对异步操作结果进行设置；可以对异步操作结果设置监听器
 :::
 
-[Future](./Futrue)
+[Future](./Future)
 
 [Promise](./Promise)
 

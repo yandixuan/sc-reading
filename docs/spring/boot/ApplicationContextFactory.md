@@ -12,7 +12,7 @@
 
 其实就是去SPI的文件去找ApplicationContextFactory的实现类 如下
 
-```text
+```txt
 org.springframework.boot.ApplicationContextFactory=\
 org.springframework.boot.web.reactive.context.AnnotationConfigReactiveWebServerApplicationContext.Factory,\
 org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext.Factory

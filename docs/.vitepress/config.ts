@@ -73,7 +73,10 @@ function sidebarJdk() {
       collapsible: true,
       items: [
         { text: 'AbstractExecutorService', link: '/java/util/concurrent/AbstractExecutorService' },
+        { text: 'AbstractQueuedSynchronizer', link: '/java/util/concurrent/AbstractQueuedSynchronizer' },
+        { text: 'ConcurrentHashMap', link: '/java/util/concurrent/ConcurrentHashMap' },
         { text: 'ExecutorService', link: '/java/util/concurrent/ExecutorService' },
+        { text: 'TreeBin', link: '/java/util/concurrent/TreeBin' },
       ],
     },
 
@@ -196,7 +199,9 @@ function sidebarNetty() {
         { text: 'DefaultPromise', link: '/netty/common/DefaultPromise' },
         { text: 'EventExecutor', link: '/netty/common/EventExecutor' },
         { text: 'EventExecutorGroup', link: '/netty/common/EventExecutorGroup' },
+        { text: 'Future', link: '/netty/common/Future' },
         { text: 'MultithreadEventExecutorGroup', link: '/netty/common/MultithreadEventExecutorGroup' },
+        { text: 'Promise', link: '/netty/common/Promise' },
         { text: 'SingleThreadEventExecutor', link: '/netty/common/SingleThreadEventExecutor' },
       ],
     },
