@@ -20,7 +20,6 @@ export default defineConfig({
     },
   },
   markdown: {
-    lineNumbers: false,
     anchor: {
       // (生成有效url的自定义函数)https://github.com/valeriangalliat/markdown-it-anchor#permalinks
       slugify: s => String(s).trim(),
@@ -33,7 +32,7 @@ function nav() {
     {
       text: 'Jdk',
       activeMatch: '^/jdk/',
-      link: '/java/util/DualPivotQuicksort',
+      link: '/java/util/ArrayDeque',
     },
     {
       text: 'Spring',
@@ -48,7 +47,7 @@ function nav() {
     {
       text: 'Redis',
       activeMatch: '^/redis/',
-      link: '/redis/ae',
+      link: '/redis/server/main',
     },
   ]
 }
@@ -57,7 +56,7 @@ function sidebarJdk() {
   return [
     {
       text: 'util',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'ArrayDeque', link: '/java/util/ArrayDeque' },
         { text: 'DualPivotQuicksort', link: '/java/util/DualPivotQuicksort' },
@@ -70,7 +69,7 @@ function sidebarJdk() {
     },
     {
       text: 'concurrent',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractExecutorService', link: '/java/util/concurrent/AbstractExecutorService' },
         { text: 'AbstractQueuedSynchronizer', link: '/java/util/concurrent/AbstractQueuedSynchronizer' },
@@ -87,7 +86,7 @@ function sidebarSpring() {
   return [
     {
       text: 'boot',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
         { text: 'AutoConfigurationImportSelector', link: '/spring/boot/AutoConfigurationImportSelector' },
@@ -106,7 +105,7 @@ function sidebarSpring() {
     },
     {
       text: 'context',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractApplicationContext', link: '/spring/context/AbstractApplicationContext' },
         { text: 'AbstractApplicationEventMulticaster', link: '/spring/context/AbstractApplicationEventMulticaster' },
@@ -120,7 +119,7 @@ function sidebarSpring() {
     },
     {
       text: 'aop',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractAdvisorAutoProxyCreator', link: '/spring/aop/AbstractAdvisorAutoProxyCreator' },
         { text: 'AbstractAspectJAdvisorFactory', link: '/spring/aop/AbstractAspectJAdvisorFactory' },
@@ -144,7 +143,7 @@ function sidebarSpring() {
     },
     {
       text: 'beans',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractAutowireCapableBeanFactory', link: '/spring/beans/AbstractAutowireCapableBeanFactory' },
         { text: 'AbstractBeanDefinition', link: '/spring/beans/AbstractBeanDefinition' },
@@ -153,7 +152,7 @@ function sidebarSpring() {
     },
     {
       text: 'core',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractPropertyResolver', link: '/spring/core/AbstractPropertyResolver' },
         { text: 'MutablePropertySources', link: '/spring/core/MutablePropertySources' },
@@ -164,7 +163,7 @@ function sidebarSpring() {
     },
     {
       text: 'tx',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractFallbackTransactionAttributeSource', link: '/spring/tx/AbstractFallbackTransactionAttributeSource' },
         { text: 'AbstractPlatformTransactionManager', link: '/spring/tx/AbstractPlatformTransactionManager' },
@@ -177,7 +176,7 @@ function sidebarSpring() {
     },
     {
       text: 'jdbc',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'ConnectionHolder', link: '/spring/jdbc/ConnectionHolder' },
         { text: 'DataSourceTransactionManager', link: '/spring/jdbc/DataSourceTransactionManager' },
@@ -191,7 +190,7 @@ function sidebarNetty() {
   return [
     {
       text: 'common',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractEventExecutor', link: '/netty/common/AbstractEventExecutor' },
         { text: 'AbstractEventExecutorGroup', link: '/netty/common/AbstractEventExecutorGroup' },
@@ -207,7 +206,7 @@ function sidebarNetty() {
     },
     {
       text: 'transport',
-      collapsible: true,
+      collapsed: true,
       items: [
         { text: 'AbstractBootstrap', link: '/netty/transport/AbstractBootstrap' },
         { text: 'AbstractChannel', link: '/netty/transport/AbstractChannel' },
@@ -231,7 +230,17 @@ function sidebarNetty() {
 function sidebarRedis() {
   return [
     {
-      collapsible: true,
+      text: 'server',
+      collapsed: false,
+      items: [
+        { text: 'main', link: '/redis/server/main' },
+        { text: 'initServer', link: '/redis/server/initServer' },
+        { text: 'initListeners', link: '/redis/server/initListeners' },
+        { text: 'InitServerLast', link: '/redis/server/InitServerLast' },
+      ],
+    },
+    {
+      collapsed: false,
       items: [
         { text: 'adlist', link: '/redis/adlist' },
         { text: 'ae_epoll', link: '/redis/ae_epoll' },
