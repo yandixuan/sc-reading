@@ -466,10 +466,18 @@ public native int arrayIndexScale(java.lang.Class aClass);
             // 且 sizeCtl  < 0 （说明还在扩容）
             while (nextTab == nextTable && table == tab &&
                    (sc = sizeCtl) < 0) {
-                // TODO: 这里回来再分析
+                /**
+                 * (sc >>> RESIZE_STAMP_SHIFT) != rs：检查 sizeCtl 中保存的扩容戳与计算得到的标识值 rs 是否一致。
+                 * sc == rs + 1：检查 sizeCtl 中保存的请求者线程数加一后是否等于 rs + 1，因为扩容请求者线程会把 sizeCtl 加 1。
+                 * sc == rs + MAX_RESIZERS：检查 sizeCtl 中保存的请求者线程数是否达到最大值 times。扩容时可能会有多个线程参与扩容，如果参与线程数过多，就需要限制参与扩容的线程数量，以防止资源浪费和性能下降。
+                 * transferIndex <= 0：检查迁移指针 transferIndex 是否越界，如果越界了就退出循环。
+                 */
                 if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
                     sc == rs + MAX_RESIZERS || transferIndex <= 0)
                     break;
+                /* CAS 操作将 sizeCtl 字段从 sc 更新为 sc + 1，如果更新成功则意味着当前线程获得了扩容的资格。
+                 * 接着调用 transfer(tab, nextTab) 方法进行数据迁移。 
+                 */
                 if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {
                     transfer(tab, nextTab);
                     break;

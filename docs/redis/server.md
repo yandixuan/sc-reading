@@ -807,6 +807,60 @@ struct sigaction {
 };
 ```
 
+```c
+void setupSignalHandlers(void) {
+    struct sigaction act;
+
+    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
+     * Otherwise, sa_handler is used. */
+    /* 信号集初始化为空
+     * sa_mask指定在信号处理程序执行过程当中，哪些信号应当被阻塞。
+     * 缺省状况下当前信号自己被阻塞，防止信号的嵌套发送 */ 
+    sigemptyset(&act.sa_mask);
+    /* 当其设置为0时，表示使用默认属性，也就是先不响应该信号，而是执行完回调函数再处理此信号 */
+    act.sa_flags = 0;
+    /* 指定信号捕捉后的关闭处理函数 */
+    act.sa_handler = sigShutdownHandler;
+    /* 处理 SIGTERM、SIGHUP信号  */
+    sigaction(SIGTERM, &act, NULL);
+    sigaction(SIGINT, &act, NULL);
+
+    /* 信号集初始化为空 */
+    sigemptyset(&act.sa_mask);
+    /* SA_NODEFER：信号处理程序在执行期间不应阻塞同一信号，即信号处理程序可以再次接收该信号并立即处理，而不必等待当前信号处理结束。
+     *
+     * SA_RESETHAND：信号处理函数执行完毕之后重置该信号的处理方式为默认方式。
+     * 也就是说，如果使用SA_RESETHAND标志，处理函数只会被执行一次，然后信号的处理方式就会被重置为默认方式，不再执行信号处理函数。
+     *
+     * SA_SIGINFO：会将其他信息（比如进程ID，状态信息等）作为参数传入信号处理函数中。（这时应该使用 sa_sigaction 而不是 sa_handler）
+     */
+    act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;  
+    act.sa_sigaction = sigsegvHandler;
+    /* 如果开启了崩溃日志，则捕捉SIGSEGV、SIGBUS、SIGFPE、SIGILL和SIGABRT信号 */
+    if(server.crashlog_enabled) {
+        sigaction(SIGSEGV, &act, NULL);
+        sigaction(SIGBUS, &act, NULL);
+        sigaction(SIGFPE, &act, NULL);
+        sigaction(SIGILL, &act, NULL);
+        sigaction(SIGABRT, &act, NULL);
+    }
+    return;
+}
+```
+
+### mustObeyClient
+
+- CLIENT_MASTER 是一个 Redis 客户端类型，它表示一个 Redis 服务器的主节点
+- CLIENT_ID_AOF 是另一个 Redis 客户端类型，它表示一个正在执行 AOF（Append-only file）持久化操作的客户端。
+
+```c
+/* Commands arriving from the master client or AOF client, should never be rejected. */
+/* 来自主客户端或 AOF 客户端的命令永远不应该被拒绝。 */
+int mustObeyClient(client *c) {
+    return c->id == CLIENT_ID_AOF || c->flags & CLIENT_MASTER;
+}
+```
+
 ### processCommand
 
 处理客户端发送的命令的函数
@@ -827,7 +881,7 @@ int processCommand(client *c) {
 
     /* in case we are starting to ProcessCommand and we already have a command we assume
      * this is a reprocessing of this command, so we do not want to perform some of the actions again. */
-    /* 根据当前是否正在重新处理命令，设置标志变量 client_reprocessing_command */
+    /* 例如：如果客户端连接断开时有未完成的命令请求，Redis 服务器会等待一段时间，以便客户端重新连接并进行命令重试，故c->cmd肯定不为NULL */
     int client_reprocessing_command = c->cmd ? 1 : 0;
 
     /* only run command filter if not reprocessing command */
@@ -863,7 +917,7 @@ int processCommand(client *c) {
      * we do not have to repeat the same checks */
     if (!client_reprocessing_command) {
         /* 通过 lookupCommand(c->argv, c->argc) 查找并获取客户端发送的命令，并将其记录到 c->cmd、c->realcmd 和 c->lastcmd 成员变量中，
-         * 分别表示当前处理的命令、实际命令和上一个执行的命令。 */
+         * 分别表示当前处理的命令、实际命令、上一个执行的命令。 */
         c->cmd = c->lastcmd = c->realcmd = lookupCommand(c->argv,c->argc);
         sds err;
         /* 检查命令是否存 */
@@ -945,11 +999,8 @@ int processCommand(client *c) {
      * However we don't perform the redirection if:
      * 1) The sender of this command is our master.
      * 2) The command has no key arguments. */
-    /* 1.集群功能已经启用。即redis-server节点运行时开启了集群模式
-     * 2.!mustObeyClient(c)表示当前客户端请求可以被重定向，即该客户端不是主节点（master）或是重定向标记（ASK或MOVED）的目标节点之一。
-     * 如果必须遵守客户端请求，则不能执行重定向操作
-     * 3.如果命令不支持槽键移动，且没有指定键参数，且未处于事务上下文中，则无法进行重定向操作。
-     */ 
+    /* 集群模式下 且 命令对应的客户端不是主节点或者是AOF客户端 且 命令在集群中可以转发或者命令的键值(key)参数个数不为0或者命令处于事务上下文中
+     * 则要考虑命令的转发 */ 
     if (server.cluster_enabled &&
         !mustObeyClient(c) &&
         !(!(c->cmd->flags&CMD_MOVABLE_KEYS) && c->cmd->key_specs_num == 0 &&
@@ -961,13 +1012,13 @@ int processCommand(client *c) {
                                         &c->slot,&error_code);
         /* 如果目标节点为NULL或非本机节点，则进行重定向操作，并记录相关信息 */                                 
         if (n == NULL || n != server.cluster->myself) {
-            /* 事务是通过MULTI和EXEC命令组合完成的，当客户端发送MULTI命令时，它进入到了一个新的事务上下文环境中。
-             * 所以如果当前正在执行的命令是EXEC命令，则说明当前客户端处于事务上下文中，此时应该抛弃该事务中的其他命令。
-             * 因为如果不抛弃，可能会导致部分命令被执行而另外一部分命令未被执行，从而引起数据不一致的问题。 */
+            /* 事务是通过MULTI和EXEC命令组合完成的
+             * 在集群环境下，由于节点间哈希槽的变化，可能会发生槽迁移等操作，导致一个客户端发出的事务命令被分摊到多个节点上去执行，从而引发事务执行的失败或出现数据一致性问题 
+             * 使用 discardTransaction 命令丢弃掉正在执行的事务，以免出现错误影响Redis集群的数据一致性和高可用性 */
             if (c->cmd->proc == execCommand) {
                 discardTransaction(c);
             } else {
-                /* 如果当前处于普通命令执行状态，则需要标记当前客户端处于事务上下文。因为如果在执行普通命令的过程中发生了重定向操作，
+                /* 如果是普通命令，则需要标记当前客户端处于事务上下文。因为如果在执行普通命令的过程中发生了重定向操作，
                  * 那么后续的命令也必须同样被转发到目标节点。而标记处于事务上下文后，在执行完所有命令之后再进行重定向，就可以保证事务的原子性和一致性。 */
                 flagTransaction(c);
             }
@@ -1046,6 +1097,7 @@ int processCommand(client *c) {
 
     /* Make sure to use a reasonable amount of memory for client side
      * caching metadata. */
+    /*  Redis 集群的内部数据追踪功能是否被开启，并在开启的情况下执行有效使用哈希槽数量的监控与限制操作 */ 
     if (server.tracking_clients) trackingLimitUsedSlots();
 
     /* Don't accept write commands if there are problems persisting on disk
@@ -1087,6 +1139,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if there are not enough good slaves and
      * user configured the min-slaves-to-write option. */
+    /* 如果没有足够良好的从节点也是不接受写命令的（min-slaves-to-write） */ 
     if (is_write_command && !checkGoodReplicasStatus()) {
         rejectCommand(c, shared.noreplicaserr);
         return C_OK;
@@ -1094,6 +1147,8 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
+    /* server.masterhost: 当前节点是否连接了主服务器(masterhost)
+     * server.repl_slave_ro: 只读从节点状态 */ 
     if (server.masterhost && server.repl_slave_ro &&
         !obey_client &&
         is_write_command)
@@ -1104,6 +1159,9 @@ int processCommand(client *c) {
 
     /* Only allow a subset of commands in the context of Pub/Sub if the
      * connection is in RESP2 mode. With RESP3 there are no limits. */
+    /* 通过判断 c->flags & CLIENT_PUBSUB 是否为真，以及 c->resp 字段是否等于 2 (表示使用 RESP2 协议)，来确定当前连接处在 Redis 的发布/订阅模式下。
+     * 然后，通过逐个比较当前待执行命令（c->cmd）的处理函数是否等于允许执行的一组特定命令，确定当前是否是被允许执行的命令。如果发现当前命令不在这个允许列表中，
+     * 则返回错误信息并拒绝执行。最后，该代码返回 C_OK 表示执行正常结束。 */ 
     if ((c->flags & CLIENT_PUBSUB && c->resp == 2) &&
         c->cmd->proc != pingCommand &&
         c->cmd->proc != subscribeCommand &&
@@ -1124,6 +1182,7 @@ int processCommand(client *c) {
     /* Only allow commands with flag "t", such as INFO, REPLICAOF and so on,
      * when replica-serve-stale-data is no and we are a replica with a broken
      * link with master. */
+    /* 当节点为从节点时 且 连接不上主节点 且 节点不会向客户端提供已经超过过期时间的数据 则拒绝命令  */ 
     if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED &&
         server.repl_serve_stale_data == 0 &&
         is_denystale_command)
@@ -1134,12 +1193,14 @@ int processCommand(client *c) {
 
     /* Loading DB? Return an error if the command has not the
      * CMD_LOADING flag. */
+    /* 当redis正在加载数据且属于非异步加载并且当前执行的命令被标记为不允许加载期间执行的命令 则拒绝命令*/ 
     if (server.loading && !server.async_loading && is_denyloading_command) {
         rejectCommand(c, shared.loadingerr);
         return C_OK;
     }
 
     /* During async-loading, block certain commands. */
+    /*  Redis 正在进行异步数据加载（async_loading）状态下，如果当前执行的命令被标记为不允许在 Redis 数据库数据异步加载期间执行 则拒绝命令 */
     if (server.async_loading && is_deny_async_loading_command) {
         rejectCommand(c,shared.loadingerr);
         return C_OK;
@@ -1152,6 +1213,11 @@ int processCommand(client *c) {
      * the MULTI plus a few initial commands refused, then the timeout
      * condition resolves, and the bottom-half of the transaction gets
      * executed, see Github PR #7022. */
+    /* 判断命令是否为长时间消耗资源的命令，例如BLPOP，且未设置 CMD_ALLOW_BUSY 标记，则会根据配置和上下文信息发送相应的错误响应给客户端
+     * 如果 Redis 配置了 busy_module_yield_flags 标记和 busy_module_yield_reply 参数，则会返回响应错误信息 -BUSY reply-to-send-to-client
+     * 如果只配置了 busy_module_yield_flags 参数，则返回共享字符串对象 shared.slowmoduleerr
+     * 如果正在运行 Lua 脚本但不是 eval 命令，则返回共享字符串对象 shared.slowscripterr
+     * 否则，返回共享字符串对象 shared.slowevalerr */ 
     if (isInsideYieldingLongCommand() && !(c->cmd->flags & CMD_ALLOW_BUSY)) {
         if (server.busy_module_yield_flags && server.busy_module_yield_reply) {
             rejectCommandFormat(c, "-BUSY %s", server.busy_module_yield_reply);
@@ -1168,6 +1234,7 @@ int processCommand(client *c) {
     /* Prevent a replica from sending commands that access the keyspace.
      * The main objective here is to prevent abuse of client pause check
      * from which replicas are exempt. */
+    /* 限制 Redis slave 进程对键空间进行写入和读取操作，以免对主 Redis 进程产生影响 */ 
     if ((c->flags & CLIENT_SLAVE) && (is_may_replicate_command || is_write_command || is_read_command)) {
         rejectCommandFormat(c, "Replica can't interact with the keyspace");
         return C_OK;
@@ -1175,6 +1242,8 @@ int processCommand(client *c) {
 
     /* If the server is paused, block the client until
      * the pause has ended. Replicas are never paused. */
+    /* 如果当前客户端不是 Redis slave，且server处于暂停状态，当前客户端被暂停的操作保存在`paused_actions中`（包括所有操作或只有写操作，并且该写入操作可能会产生副本命令），
+     * 那么它将被阻塞（暂停）并推迟进行，直到给定的条件都得到解除为止 */
     if (!(c->flags & CLIENT_SLAVE) && 
         ((isPausedActions(PAUSE_ACTION_CLIENT_ALL)) ||
         ((isPausedActions(PAUSE_ACTION_CLIENT_WRITE)) && is_may_replicate_command)))
@@ -1184,6 +1253,8 @@ int processCommand(client *c) {
     }
 
     /* Exec the command */
+    /* 如果当前客户端处于事务 MULTI 状态并且不执行 EXEC、DISCARD、MULTI、WATCH、QUIT、RESET 这些和事务相关的命令，
+     * 如果满足条件，则将该命令加入到该客户端的事务队列中（queueMultiCommand），并回复客户端 "QUEUED" */
     if (c->flags & CLIENT_MULTI &&
         c->cmd->proc != execCommand &&
         c->cmd->proc != discardCommand &&
@@ -1195,54 +1266,16 @@ int processCommand(client *c) {
         queueMultiCommand(c, cmd_flags);
         addReply(c,shared.queued);
     } else {
+        /*  CMD_CALL_FULL:表示完整执行该命令 */
         int flags = CMD_CALL_FULL;
+        /*  flags 参数追加了 CMD_CALL_REPROCESSING 标记表示重新执行命令 */
         if (client_reprocessing_command) flags |= CMD_CALL_REPROCESSING;
         call(c,flags);
+        /* 检查是否有阻塞在某个键上的客户端需要被唤醒（handleClientsBlockedOnKeys） */
         if (listLength(server.ready_keys))
             handleClientsBlockedOnKeys();
     }
 
     return C_OK;
-}
-```
-
-```c
-void setupSignalHandlers(void) {
-    struct sigaction act;
-
-    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
-     * Otherwise, sa_handler is used. */
-    /* 信号集初始化为空
-     * sa_mask指定在信号处理程序执行过程当中，哪些信号应当被阻塞。
-     * 缺省状况下当前信号自己被阻塞，防止信号的嵌套发送 */ 
-    sigemptyset(&act.sa_mask);
-    /* 当其设置为0时，表示使用默认属性，也就是先不响应该信号，而是执行完回调函数再处理此信号 */
-    act.sa_flags = 0;
-    /* 指定信号捕捉后的关闭处理函数 */
-    act.sa_handler = sigShutdownHandler;
-    /* 处理 SIGTERM、SIGHUP信号  */
-    sigaction(SIGTERM, &act, NULL);
-    sigaction(SIGINT, &act, NULL);
-
-    /* 信号集初始化为空 */
-    sigemptyset(&act.sa_mask);
-    /* SA_NODEFER：信号处理程序在执行期间不应阻塞同一信号，即信号处理程序可以再次接收该信号并立即处理，而不必等待当前信号处理结束。
-     *
-     * SA_RESETHAND：信号处理函数执行完毕之后重置该信号的处理方式为默认方式。
-     * 也就是说，如果使用SA_RESETHAND标志，处理函数只会被执行一次，然后信号的处理方式就会被重置为默认方式，不再执行信号处理函数。
-     *
-     * SA_SIGINFO：会将其他信息（比如进程ID，状态信息等）作为参数传入信号处理函数中。（这时应该使用 sa_sigaction 而不是 sa_handler）
-     */
-    act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;  
-    act.sa_sigaction = sigsegvHandler;
-    /* 如果开启了崩溃日志，则捕捉SIGSEGV、SIGBUS、SIGFPE、SIGILL和SIGABRT信号 */
-    if(server.crashlog_enabled) {
-        sigaction(SIGSEGV, &act, NULL);
-        sigaction(SIGBUS, &act, NULL);
-        sigaction(SIGFPE, &act, NULL);
-        sigaction(SIGILL, &act, NULL);
-        sigaction(SIGABRT, &act, NULL);
-    }
-    return;
 }
 ```

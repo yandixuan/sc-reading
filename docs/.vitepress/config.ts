@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import type { DefaultTheme } from 'vitepress'
 
 export default defineConfig({
   title: '源码阅读',
@@ -52,7 +53,7 @@ function nav() {
   ]
 }
 
-function sidebarJdk() {
+function sidebarJdk(): DefaultTheme.SidebarItem[] {
   return [
     {
       text: 'util',
@@ -82,7 +83,7 @@ function sidebarJdk() {
   ]
 }
 
-function sidebarSpring() {
+function sidebarSpring(): DefaultTheme.SidebarItem[] {
   return [
     {
       text: 'boot',
@@ -186,7 +187,7 @@ function sidebarSpring() {
   ]
 }
 
-function sidebarNetty() {
+function sidebarNetty(): DefaultTheme.SidebarItem[] {
   return [
     {
       text: 'common',
@@ -227,31 +228,55 @@ function sidebarNetty() {
   ]
 }
 
-function sidebarRedis() {
+function sidebarRedis(): DefaultTheme.SidebarItem[] {
   return [
     {
-      text: 'server',
+      text: '数据结构',
+      collapsed: false,
+      items: [
+        { text: 'adlist', link: '/redis/adlist' },
+        { text: 'sds', link: '/redis/sds' },
+      ],
+    },
+    {
+      text: '字典',
+      collapsed: false,
+      items: [
+        { text: 'dict', link: '/redis/dict' },
+      ],
+    },
+    {
+      text: '数据类型命令',
+      collapsed: false,
+      items: [
+        { text: 'string', link: '/redis/t_string.md' },
+        { text: 'list', link: '/redis/t_list.md' },
+        { text: 'set', link: '/redis/t_set.md' },
+        { text: 'zset', link: '/redis/t_zset.md' },
+        { text: 'hash', link: '/redis/t_hash.md' },
+      ],
+    },
+    {
+      text: '服务器',
       collapsed: false,
       items: [
         { text: 'main', link: '/redis/server/main' },
         { text: 'initServer', link: '/redis/server/initServer' },
         { text: 'initListeners', link: '/redis/server/initListeners' },
         { text: 'InitServerLast', link: '/redis/server/InitServerLast' },
+        { text: 'call', link: '/redis/server/call' },
       ],
     },
     {
       collapsed: false,
       items: [
-        { text: 'adlist', link: '/redis/adlist' },
         { text: 'ae_epoll', link: '/redis/ae_epoll' },
         { text: 'ae', link: '/redis/ae' },
         { text: 'anet', link: '/redis/anet' },
         { text: 'config', link: '/redis/config' },
         { text: 'connection', link: '/redis/connection' },
-        { text: 'dict', link: '/redis/dict' },
         { text: 'evict', link: '/redis/evict' },
         { text: 'networking', link: '/redis/networking' },
-        { text: 'sds', link: '/redis/sds' },
         { text: 'server', link: '/redis/server' },
         { text: 'socket', link: '/redis/socket' },
         { text: 'zmalloc', link: '/redis/zmalloc' },
