@@ -14,7 +14,7 @@ hero:
       link: /redis/ae
     - theme: alt
       text: View on GitHub
-      link: https://github.com/vuejs/vitepress
+      link: https://github.com/yandixuan/sc-reading
 
 features:
   - icon: 📝

@@ -231,45 +231,32 @@ function sidebarNetty(): DefaultTheme.SidebarItem[] {
 function sidebarRedis(): DefaultTheme.SidebarItem[] {
   return [
     {
-      text: '数据结构',
+      text: 'server',
       collapsed: false,
       items: [
-        { text: 'adlist', link: '/redis/adlist' },
-        { text: 'sds', link: '/redis/sds' },
-      ],
-    },
-    {
-      text: '字典',
-      collapsed: false,
-      items: [
-        { text: 'dict', link: '/redis/dict' },
-      ],
-    },
-    {
-      text: '数据类型命令',
-      collapsed: false,
-      items: [
-        { text: 'string', link: '/redis/t_string.md' },
-        { text: 'list', link: '/redis/t_list.md' },
-        { text: 'set', link: '/redis/t_set.md' },
-        { text: 'zset', link: '/redis/t_zset.md' },
-        { text: 'hash', link: '/redis/t_hash.md' },
-      ],
-    },
-    {
-      text: '服务器',
-      collapsed: false,
-      items: [
+        { text: 'header', link: '/redis/server/header' },
         { text: 'main', link: '/redis/server/main' },
         { text: 'initServer', link: '/redis/server/initServer' },
         { text: 'initListeners', link: '/redis/server/initListeners' },
         { text: 'InitServerLast', link: '/redis/server/InitServerLast' },
         { text: 'call', link: '/redis/server/call' },
+        { text: 'beforeSleep', link: '/redis/server/beforeSleep' },
+        { text: 'afterSleep', link: '/redis/server/afterSleep' },
+      ],
+    },
+    {
+      text: 'networking',
+      collapsed: false,
+      items: [
+        { text: 'io', link: '/redis/networking/io' },
       ],
     },
     {
       collapsed: false,
       items: [
+        { text: 'adlist', link: '/redis/adlist' },
+        { text: 'sds', link: '/redis/sds' },
+        { text: 'dict', link: '/redis/dict' },
         { text: 'ae_epoll', link: '/redis/ae_epoll' },
         { text: 'ae', link: '/redis/ae' },
         { text: 'anet', link: '/redis/anet' },
