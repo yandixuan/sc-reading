@@ -639,8 +639,6 @@ int processCommandAndResetClient(client *c) {
 
 ### processInputBuffer
 
-表示是否处于执行某个长时间命令的状态
-
 ```c
 int processInputBuffer(client *c) {
     /* Keep processing while there is something in the input buffer */

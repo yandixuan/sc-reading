@@ -1,7 +1,16 @@
 
 # beforeSleep
 
-[服务器主线程进入睡眠状态之前被调用](../ae#aeProcessEvents)。该函数主要用于执行在服务器进入休眠状态之前必须完成的一些操作，例如更新统计数据、持久化数据到磁盘等。
+[事件循环执行`aeApiPoll`前调用](../ae#aeProcessEvents)
+
+:::tip todo
+
+- 淘汰过期的key
+- unblock client
+- 多线程处理I/O读写
+- 关闭一些内存占用过大的连接
+- 释放 modules 锁 (moduleReleaseGIL), redis框架对数据已经完成读写，允许用户自行实现的模块进行操作
+:::
 
 ```c
 void beforeSleep(struct aeEventLoop *eventLoop) {
@@ -17,7 +26,8 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * case we keep track of the number of events we are processing, since
      * processEventsWhileBlocked() wants to stop ASAP if there are no longer
      * events to handle. */
-    /* 如果服务器处于阻塞状态 */ 
+    /* 在 RDB/AOF 加载期间处理客户端，processEventsWhileBlocked会调用aeProcessEvents方法
+     * 我们不希望执行所有操作（例如，我们不想过期键） */
     if (ProcessingEventsWhileBlocked) {
         /* 统计已经处理的事件数量，初始值为 0。*/
         uint64_t processed = 0;
@@ -77,6 +87,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * blocking commands. */
     /* 检查是否有由实现阻塞命令的模块，并且解除阻止的客户端。*/
     if (moduleCount()) {
+        /* REDISMODULE_SUBEVENT_EVENTLOOP_BEFORE_SLEEP表示子事件类型为事件循环前休眠（即在事件循环每次进入休眠之前触发的事件） */
         moduleFireServerEvent(REDISMODULE_EVENT_EVENTLOOP,
                               REDISMODULE_SUBEVENT_EVENTLOOP_BEFORE_SLEEP,
                               NULL);

@@ -92,7 +92,8 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     aeApiState *state = eventLoop->apidata;
     int retval, numevents = 0;
-    /* 调用 epoll_wait 获取监听到的事件 */
+    /* 调用 epoll_wait 获取监听到的事件 
+     * 因为定时任务的存在(AE_TIME_EVENTS)，3目表达式都走第一个，即线程让渡一定的CPU时间 */
     retval = epoll_wait(state->epfd,state->events,eventLoop->setsize,
             tvp ? (tvp->tv_sec*1000 + (tvp->tv_usec + 999)/1000) : -1);
     if (retval > 0) {
