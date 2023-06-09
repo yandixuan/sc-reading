@@ -267,6 +267,7 @@ function sidebarRedis(): DefaultTheme.SidebarItem[] {
         { text: 'server', link: '/redis/server' },
         { text: 'socket', link: '/redis/socket' },
         { text: 'zmalloc', link: '/redis/zmalloc' },
+        { text: 'skiplist', link: '/redis/skiplist' },
       ],
     },
   ]
