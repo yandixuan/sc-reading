@@ -1,4 +1,8 @@
 {
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.markdownlint": true
+  },
   "cSpell.enabled": false,
   "markdownlint.config": {
     "MD010": {
@@ -6,6 +10,11 @@
       "spaces_per_tab": 4
     },
     "MD051": false,
-    "MD024": false
-  }
+    "MD024": false,
+    "MD033": false
+    // {
+    //   "allowed_elements": ["u"]
+    // }
+  },
+  "unocss.root": "docs"
 }

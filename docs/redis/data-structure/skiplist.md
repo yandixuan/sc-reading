@@ -105,33 +105,22 @@ zskiplist *zslCreate(void) {
 
 ### zslRandomLevel
 
-跳跃表节点层高随机算法
-
----
+跳跃表节点层高随机算法，其中关键参数如下：
 
 - ZSKIPLIST_MAXLEVEL: 32
 - ZSKIPLIST_P: 0.25
 
----
+#### ZSKIPLIST_P
 
-:::tip
+跳跃表节点出现在上层索引节点的概率为0.25，因此只有大约每4个节点才会产生一个上层索引节点，从而保证了跳跃表的空间利用率，在这样的概率下跳跃表的查询效率会略大于O(logN)，但是索引的存储内存却能节省一半。
 
-redis的跳跃表节点出现在上层索引节点的概率为0.25，因此只有大约每4个节点才会产生一个上层索引节点，从而保证了跳跃表的空间利用率，在这样的概率下跳跃表的查询效率会略大于O(logN)，但是索引的存储内存却能节省一半。
-:::
+random()取值在`[0,RAND_MAX]`区间，`random()<threshold`的概率为0.25，层数则提升一层
 
-:::tip
+- level1的概率则为`0.75`
+- level2的概率则为`0.75*0.25`
+- leveln的概率则为`(1-ZSKIPLIST_P )* ZSKIPLIST_P ^ (n - 1)`
 
-`threshold`: `ZSKIPLIST_P*RAND_MAX`
-
-`random()`: 值分布在`[0,2^32-1]`区间
-
-`random()<threshold`的概率为0.25，则提升一层
-
-level为1的概率则为0.75，level为2的概率则为0.75*0.25。
-
-当最终层数大于 1 时，每次层数增加的概率都是 ZSKIPLIST_P，那么 n 层的概率是 (1-ZSKIPLIST_P )* ZSKIPLIST_P ^ (n - 1)，这就是所谓的幂次定律（powerlaw）即越大的数出现的概率越小。
-
-:::
+这就是所谓的幂次定律（powerlaw）即越大的数出现的概率。
 
 ```c
 int zslRandomLevel(void) {

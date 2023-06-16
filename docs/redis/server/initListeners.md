@@ -1,10 +1,6 @@
 # initListeners
 
----
-
 根据配置文件中指定的IP地址和端口号创建并启动监听套接字,在`connTypeInitialize`方法中，我们注册了不同连接类型的`ConnectionType`的结构体，注册到了connTypes数组中。（tcp的监听端口则由[`listenToPort`](../server#listenToPort)函数完成）
-
----
 
 ```c
 void initListeners() {

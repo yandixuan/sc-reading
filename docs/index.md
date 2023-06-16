@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Get Started
-      link: /redis/ae
+      link: /redis/server
     - theme: alt
       text: View on GitHub
       link: https://github.com/yandixuan/sc-reading

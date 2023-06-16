@@ -1,9 +1,15 @@
-# main
+# server
 
----
-redis-server启动入口函数（由于server.c文件过大，这里分析主要函数）
+## 相关
 
----
+<PageLink icon="i-carbon-document" title="头文件" url="./header"/>
+<PageLink icon="i-carbon-document" title="initServer" url="./initServer"/>
+<PageLink icon="i-carbon-document" title="initListeners" url="./initListeners"/>
+<PageLink icon="i-carbon-document" title="InitServerLast" url="./InitServerLast"/>
+
+## main
+
+redis-server进程主函数入口
 
 ```c
     struct timeval tv;

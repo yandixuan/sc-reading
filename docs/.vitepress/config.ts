@@ -16,7 +16,7 @@ export default defineConfig({
       '/redis': sidebarRedis(),
     },
     footer: {
-      message: 'Released under the MIT License.',
+      message: 'powered by <a href="https://vitepress.dev/">VitePress</a>',
       copyright: 'Copyright © 2022-present ydx',
     },
   },
@@ -48,7 +48,7 @@ function nav() {
     {
       text: 'Redis',
       activeMatch: '^/redis/',
-      link: '/redis/server/main',
+      link: '/redis/server/',
     },
   ]
 }
@@ -231,28 +231,37 @@ function sidebarNetty(): DefaultTheme.SidebarItem[] {
 function sidebarRedis(): DefaultTheme.SidebarItem[] {
   return [
     {
+      text: '数据结构',
+      collapsed: true,
+      items: [
+        { text: 'sds', link: '/redis/data-structure/sds' },
+        { text: 'listpack', link: '/redis/data-structure/listpack' },
+      ],
+    },
+    {
       text: 'server',
-      collapsed: false,
+      link: '/redis/server/index',
+      collapsed: true,
       items: [
         { text: 'header', link: '/redis/server/header' },
-        { text: 'main', link: '/redis/server/main' },
         { text: 'initServer', link: '/redis/server/initServer' },
         { text: 'initListeners', link: '/redis/server/initListeners' },
         { text: 'InitServerLast', link: '/redis/server/InitServerLast' },
-        { text: 'call', link: '/redis/server/call' },
+        // { text: 'call', link: '/redis/server/call' },
         { text: 'beforeSleep', link: '/redis/server/beforeSleep' },
         { text: 'afterSleep', link: '/redis/server/afterSleep' },
       ],
     },
     {
       text: 'networking',
-      collapsed: false,
+      collapsed: true,
       items: [
         { text: 'io', link: '/redis/networking/io' },
       ],
     },
     {
-      collapsed: false,
+      text: 'other',
+      collapsed: true,
       items: [
         { text: 'adlist', link: '/redis/adlist' },
         { text: 'sds', link: '/redis/sds' },
@@ -264,10 +273,11 @@ function sidebarRedis(): DefaultTheme.SidebarItem[] {
         { text: 'connection', link: '/redis/connection' },
         { text: 'evict', link: '/redis/evict' },
         { text: 'networking', link: '/redis/networking' },
-        { text: 'server', link: '/redis/server' },
         { text: 'socket', link: '/redis/socket' },
         { text: 'zmalloc', link: '/redis/zmalloc' },
         { text: 'skiplist', link: '/redis/skiplist' },
+        { text: 'listpack', link: '/redis/listpack' },
+        { text: 't_zset', link: '/redis/t_zset' },
       ],
     },
   ]
