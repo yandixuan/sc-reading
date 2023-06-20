@@ -115,10 +115,9 @@ private boolean contains(PriorityQueueNode node, int i) {
 
 ### bubbleUp
 
-这里排序的方式是用小顶堆实现的
+小顶堆用数组方式实现，如下图所示：
 
 ![小顶堆](/Min-Heap-with-nodes-marked.png)
-`
 
 - 每个结点的左孩子为下标i的2倍加1：left child(i) = `i * 2 + 1`；每个结点的右孩子为下标i的2倍加2：`right child(i) = i * 2 + 2`
 - 每个结点的父亲结点为下标的二分之一：parent(i) = `i / 2`，注意这里是整数除，2和3除以2都为1，大家可以验证一下；

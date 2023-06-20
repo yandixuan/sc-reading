@@ -2,10 +2,10 @@
 
 ## 相关
 
-<PageLink icon="i-carbon-document" title="头文件" url="./header"/>
-<PageLink icon="i-carbon-document" title="initServer" url="./initServer"/>
-<PageLink icon="i-carbon-document" title="initListeners" url="./initListeners"/>
-<PageLink icon="i-carbon-document" title="InitServerLast" url="./InitServerLast"/>
+<VPLink icon="i-carbon-document" title="头文件" url="./header"/>
+<VPLink icon="i-carbon-document" title="initServer" url="./initServer"/>
+<VPLink icon="i-carbon-document" title="initListeners" url="./initListeners"/>
+<VPLink icon="i-carbon-document" title="InitServerLast" url="./InitServerLast"/>
 
 ## main
 

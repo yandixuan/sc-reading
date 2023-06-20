@@ -7,6 +7,6 @@ export {}
 
 declare module 'vue' {
   export interface GlobalComponents {
-    PageLink: typeof import('./.vitepress/theme/components/PageLink.vue')['default']
+    VPLink: typeof import('./.vitepress/theme/components/VPLink.vue')['default']
   }
 }
