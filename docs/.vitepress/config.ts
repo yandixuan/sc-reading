@@ -236,6 +236,8 @@ function sidebarRedis(): DefaultTheme.SidebarItem[] {
       items: [
         { text: 'sds', link: '/redis/data-structure/sds' },
         { text: 'listpack', link: '/redis/data-structure/listpack' },
+        { text: 'skiplist', link: '/redis/data-structure/skiplist' },
+        { text: 'adlist', link: '/redis/data-structure/adlist' },
       ],
     },
     {

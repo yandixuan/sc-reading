@@ -1,24 +1,20 @@
 # sds(简单动态字符串)
 
-[参考](https://juejin.cn/post/6980974661664407582#heading-7)
+## 数据结构
 
-## 头文件
+### sdshdr
+
+`simple dynamic string header`
+
+类型:
+
+- sdshdr5
+- sdshdr8
+- sdshdr16
+- sdshdr32
+- sdshdr64
 
 ```c
-#ifndef __SDS_H
-#define __SDS_H
-
-#define SDS_MAX_PREALLOC (1024*1024)
-extern const char *SDS_NOINIT;
-
-#include <sys/types.h>
-#include <stdarg.h>
-#include <stdint.h>
-
-typedef char *sds;
-/* Simple Dynamic String(动态字符串) */
-/* __attribute__ ((__packed__)) 取消内存对齐，或者说是1字节对齐 */
-
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) sdshdr5 {
@@ -27,14 +23,14 @@ struct __attribute__ ((__packed__)) sdshdr5 {
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr8 {
-    // o(1)时间复杂度获取字符串长度，不用去遍历了
-    /*flag 低三位 存储类型;  高5位 存储数据长度.  2^5=32.  因为buf最后以/0结尾. 故最大长度为31.*/
+    /* o(1)时间复杂度获取字符串长度，不用去遍历了 */
+    /* flag 低三位 存储类型，高5位存储数据长度.2^5=32.因为buf最后以/0结尾. 故最大长度为31.*/
     uint8_t len; /* used */
-    // alloc代表着在不包括SDS头部和结尾的NULL字符的情况下，sds能够存储的字符串的最大容量
+    /* alloc代表着在不包括SDS头部和结尾的NULL字符的情况下，sds能够存储的字符串的最大容量 */
     uint8_t alloc; /* excluding the header and null terminator */
-    // 无符号字符2字节8位用了低3位高5位未使用，代表sds的类型
+    /* 无符号字符2字节8位用了低3位高5位未使用，代表sds的类型 */
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    // buf为字符数组，真正用来存储字符串
+    /* buf为字符数组，真正用来存储字符串 */
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
@@ -55,7 +51,15 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
+```
 
+## flags
+
+sdshdr8以上内存结构中才有flags
+
+`flags`低三位存储类型，`flags & SDS_TYPE_MASK(0111)`取到类型
+
+```c
 #define SDS_TYPE_5  0
 #define SDS_TYPE_8  1
 #define SDS_TYPE_16 2
@@ -63,296 +67,123 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
-/**
- * 中连接符##用来将两个token连接为一个token
- * SDS_HDR(8,s) -----> ((struct sdshdr8 *)((s) - (sizeof(struct sdshdr8))))
- * struct sdshdr 结构体中的最后一个 char buf[] 被称为 flexible array member() ，在计算结构体大小的时候是不记入在内的
- * s-sizeof(struct sdshdr##T) ----> 即获取到指向结构体的首地址的指针
- * 定义并初始化一个相应类型的结构体指针变量，它指向一个已存在的这个类型的结构体内存
- */
-#define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
-/*
- * 宏
- * 返回指向结构体的首地址的地址
- */
-#define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
-#define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
-
-static inline size_t sdslen(const sds s) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            return SDS_TYPE_5_LEN(flags);
-        case SDS_TYPE_8:
-            /* 获取结构体的属性len即sds字符串长度*/
-            return SDS_HDR(8,s)->len;
-        case SDS_TYPE_16:
-            return SDS_HDR(16,s)->len;
-        case SDS_TYPE_32:
-            return SDS_HDR(32,s)->len;
-        case SDS_TYPE_64:
-            return SDS_HDR(64,s)->len;
-    }
-    return 0;
-}
-/* 获取sds字符串空余空间（即alloc - len） */
-static inline size_t sdsavail(const sds s) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5: {
-            return 0;
-        }
-        case SDS_TYPE_8: {
-            SDS_HDR_VAR(8,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_16: {
-            SDS_HDR_VAR(16,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_32: {
-            SDS_HDR_VAR(32,s);
-            return sh->alloc - sh->len;
-        }
-        case SDS_TYPE_64: {
-            SDS_HDR_VAR(64,s);
-            return sh->alloc - sh->len;
-        }
-    }
-    return 0;
-}
-/* 设置sds字符串长度 */
-static inline void sdssetlen(sds s, size_t newlen) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            {
-                unsigned char *fp = ((unsigned char*)s)-1;
-                *fp = SDS_TYPE_5 | (newlen << SDS_TYPE_BITS);
-            }
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->len = newlen;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->len = newlen;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->len = newlen;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->len = newlen;
-            break;
-    }
-}
-/*  增加sds字符串长度 */
-static inline void sdsinclen(sds s, size_t inc) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            {
-                unsigned char *fp = ((unsigned char*)s)-1;
-                unsigned char newlen = SDS_TYPE_5_LEN(flags)+inc;
-                *fp = SDS_TYPE_5 | (newlen << SDS_TYPE_BITS);
-            }
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->len += inc;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->len += inc;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->len += inc;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->len += inc;
-            break;
-    }
-}
-/* 获取sds字符串容量 */
-/* sdsalloc() = sdsavail() + sdslen() */
-static inline size_t sdsalloc(const sds s) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            return SDS_TYPE_5_LEN(flags);
-        case SDS_TYPE_8:
-            return SDS_HDR(8,s)->alloc;
-        case SDS_TYPE_16:
-            return SDS_HDR(16,s)->alloc;
-        case SDS_TYPE_32:
-            return SDS_HDR(32,s)->alloc;
-        case SDS_TYPE_64:
-            return SDS_HDR(64,s)->alloc;
-    }
-    return 0;
-}
-/* 设置sds字符串容量 */
-static inline void sdssetalloc(sds s, size_t newlen) {
-    unsigned char flags = s[-1];
-    switch(flags&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            /* Nothing to do, this type has no total allocation info. */
-            break;
-        case SDS_TYPE_8:
-            SDS_HDR(8,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_16:
-            SDS_HDR(16,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_32:
-            SDS_HDR(32,s)->alloc = newlen;
-            break;
-        case SDS_TYPE_64:
-            SDS_HDR(64,s)->alloc = newlen;
-            break;
-    }
-}
-
-sds sdsnewlen(const void *init, size_t initlen);
-sds sdstrynewlen(const void *init, size_t initlen);
-sds sdsnew(const char *init);
-sds sdsempty(void);
-sds sdsdup(const sds s);
-void sdsfree(sds s);
-sds sdsgrowzero(sds s, size_t len);
-sds sdscatlen(sds s, const void *t, size_t len);
-sds sdscat(sds s, const char *t);
-sds sdscatsds(sds s, const sds t);
-sds sdscpylen(sds s, const char *t, size_t len);
-sds sdscpy(sds s, const char *t);
-
-sds sdscatvprintf(sds s, const char *fmt, va_list ap);
-#ifdef __GNUC__
-sds sdscatprintf(sds s, const char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
-#else
-sds sdscatprintf(sds s, const char *fmt, ...);
-#endif
-
-sds sdscatfmt(sds s, char const *fmt, ...);
-sds sdstrim(sds s, const char *cset);
-void sdssubstr(sds s, size_t start, size_t len);
-void sdsrange(sds s, ssize_t start, ssize_t end);
-void sdsupdatelen(sds s);
-void sdsclear(sds s);
-int sdscmp(const sds s1, const sds s2);
-sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
-void sdsfreesplitres(sds *tokens, int count);
-void sdstolower(sds s);
-void sdstoupper(sds s);
-sds sdsfromlonglong(long long value);
-sds sdscatrepr(sds s, const char *p, size_t len);
-sds *sdssplitargs(const char *line, int *argc);
-sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
-sds sdsjoin(char **argv, int argc, char *sep);
-sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen);
-int sdsneedsrepr(const sds s);
-
-/* Callback for sdstemplate. The function gets called by sdstemplate
- * every time a variable needs to be expanded. The variable name is
- * provided as variable, and the callback is expected to return a
- * substitution value. Returning a NULL indicates an error.
- */
-typedef sds (*sdstemplate_callback_t)(const sds variable, void *arg);
-sds sdstemplate(const char *template, sdstemplate_callback_t cb_func, void *cb_arg);
-
-/* Low level functions exposed to the user API */
-sds sdsMakeRoomFor(sds s, size_t addlen);
-sds sdsMakeRoomForNonGreedy(sds s, size_t addlen);
-void sdsIncrLen(sds s, ssize_t incr);
-sds sdsRemoveFreeSpace(sds s, int would_regrow);
-sds sdsResize(sds s, size_t size, int would_regrow);
-size_t sdsAllocSize(sds s);
-void *sdsAllocPtr(sds s);
-
-/* Export the allocator used by SDS to the program using SDS.
- * Sometimes the program SDS is linked to, may use a different set of
- * allocators, but may want to allocate or free things that SDS will
- * respectively free or allocate. */
-void *sds_malloc(size_t size);
-void *sds_realloc(void *ptr, size_t size);
-void sds_free(void *ptr);
-
-#ifdef REDIS_TEST
-int sdsTest(int argc, char *argv[], int flags);
-#endif
-
-#endif
-
 ```
 
-## 方法
+## 宏
+
+### SDS_HDR_VAR
+
+在c语言宏定义中，##用来将两个token连接为一个token，假如`T=5`，那么`sdshdr##T=sdshdr5`
+
+参数 s 是sdshdr 结构体中的字符串指针，即等价于 buf。如果想得到SDS的起始地址，则用 `buf`的起始地址减 `sdshdr`所占字节数
+
+该表达式得到的是结构体变量 `sdshdr##T` 的起始地址
+
+```c
+#define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
+```
+
+### SDS_HDR
+
+即返回一个 保存字符串 s 的结构体地址
+
+```c
+#define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+```
+
+### SDS_TYPE_5_LEN
+
+右移三位，剩下的则代表长度
+
+```c
+#define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
+```
+
+## 函数
+
+### sdslen
+
+获取SDS字符串的长度
+
+```c
+static inline size_t sdslen(const sds s)
+```
+
+### sdsavail
+
+获取sds字符串空余空间（即alloc - len）
+
+```c
+static inline size_t sdsavail(const sds s)
+```
+
+### sdssetlen
+
+设置sds字符串长度
+
+```c
+static inline void sdssetlen(sds s, size_t newlen)
+```
+
+### sdsinclen
+
+增加sds字符串长度
+
+```c
+static inline void sdsinclen(sds s, size_t inc)
+```
+
+### sdsalloc
+
+获取sds字符串容量
+
+sdsalloc() = sdsavail() + sdslen()
+
+```c
+static inline size_t sdsalloc(const sds s)
+```
+
+### sdssetalloc
+
+设置sds字符串容量
+
+```c
+static inline void sdssetalloc(sds s, size_t newlen)
+```
 
 ### sdsHdrSize
 
 根据类型返回sdshdr结构体的大小
 
 ```c
-static inline int sdsHdrSize(char type) {
-    switch(type&SDS_TYPE_MASK) {
-        case SDS_TYPE_5:
-            return sizeof(struct sdshdr5);
-        case SDS_TYPE_8:
-            return sizeof(struct sdshdr8);
-        case SDS_TYPE_16:
-            return sizeof(struct sdshdr16);
-        case SDS_TYPE_32:
-            return sizeof(struct sdshdr32);
-        case SDS_TYPE_64:
-            return sizeof(struct sdshdr64);
-    }
-    return 0;
-}
+static inline int sdsHdrSize(char type)
 ```
 
 ### sdsReqType
 
-根据字符串的大小确定SDS_TYPE
+根据字符串的长度确定SDS的类型
 
 ```c
-static inline char sdsReqType(size_t string_size) {
-    if (string_size < 1<<5)
-        return SDS_TYPE_5;
-    if (string_size < 1<<8)
-        return SDS_TYPE_8;
-    if (string_size < 1<<16)
-        return SDS_TYPE_16;
-#if (LONG_MAX == LLONG_MAX)
-    if (string_size < 1ll<<32)
-        return SDS_TYPE_32;
-    return SDS_TYPE_64;
-#else
-    return SDS_TYPE_32;
-#endif
-}
+static inline char sdsReqType(size_t string_size)
 ```
 
 ### sdsTypeMaxSize
 
-根据SDS_TYPE返字符串最大长度
+根据SDS的类型，返回容纳字符串的最大长度
 
 ```c
-static inline size_t sdsTypeMaxSize(char type) {
-    if (type == SDS_TYPE_5)
-        return (1<<5) - 1;
-    if (type == SDS_TYPE_8)
-        return (1<<8) - 1;
-    if (type == SDS_TYPE_16)
-        return (1<<16) - 1;
-#if (LONG_MAX == LLONG_MAX)
-    if (type == SDS_TYPE_32)
-        return (1ll<<32) - 1;
-#endif
-    return -1; /* this is equivalent to the max SDS_TYPE_64 or SDS_TYPE_32 */
-}
-
+static inline size_t sdsTypeMaxSize(char type)
 ```
 
 ### _sdsnewlen
 
-创建新的sds，trymalloc参数
+在堆内存为SDS申请内存地址，填充相应数据。
+
+`sdsnewlen` 和 `sdstrynewlen` 共同调用该方法，区别是`trymalloc`传入的值不同。
+
+- trymalloc:
+  - 1: 内存申请如果失败，则返回NULL
+  - 0: 内存申请如果失败，则终止程序
 
 ```c
 sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
@@ -445,17 +276,32 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
 
 ### sdsnew
 
-```c
+新建一个SDS对象
 
+```c
+sds sdsnew(const char *init) {
+    size_t initlen = (init == NULL) ? 0 : strlen(init);
+    return sdsnewlen(init, initlen);
+}
 ```
 
 ### sdsdup
 
-```c
+复制SDS对象
 
+```c
+sds sdsdup(const sds s) {
+    return sdsnewlen(s, sdslen(s));
+}
 ```
 
 ### _sdsMakeRoomFor
+
+在保持现有字符串内容不变的情况下，为将要添加的新数据量分配足够的空间
+
+- greedy: 是否贪婪
+  - 1: 申请添加新数据量后总长度的2倍空间
+  - 0: 申请添加新数据量后总长度的空间，不额外申请多余的空间
 
 ```c
 sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
@@ -469,47 +315,51 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
     size_t usable;
 
     /* Return ASAP if there is enough space left. */
-    // 可用空间足够则不用扩容
+    /* 可用空间足够则不用扩容 */
     if (avail >= addlen) return s;
-    // 获取字符串长度
+    /* 获取字符串长度 */
     len = sdslen(s);
-    // 获取sds内存地址起始位置，s是buf的指针地址
+    /* 获取sds内存地址起始位置，s是buf的指针地址 */
     sh = (char*)s-sdsHdrSize(oldtype);
-    // 计算新的字符串长度
+    /* 计算新的字符串长度 */
     reqlen = newlen = (len+addlen);
     // 防止长度溢出
     assert(newlen > len);   /* Catch size_t overflow */
-    /** 根据greedy判断是否需要额外扩展空间 */
+    /* 根据greedy判断是否需要额外扩展空间 */
     if (greedy == 1) {
         if (newlen < SDS_MAX_PREALLOC)
             newlen *= 2;
         else
             newlen += SDS_MAX_PREALLOC;
     }
-    // 根据新的字符串长度取得对于的sds类型
+    /* 根据新的字符串长度取得对于的sds类型 */ 
     type = sdsReqType(newlen);
 
     /* Don't use type 5: the user is appending to the string and type 5 is
      * not able to remember empty space, so sdsMakeRoomFor() must be called
      * at every appending operation. */
-    // 至少使用SDS_TYPE_8这个类型
+    /* 至少使用SDS_TYPE_8这个类型 */
     if (type == SDS_TYPE_5) type = SDS_TYPE_8;
-    // 获取struct的大小
+    /* 获取struct的大小 */
     hdrlen = sdsHdrSize(type);
-    // 防止溢出
+    /* 防止溢出 */
     assert(hdrlen + newlen + 1 > reqlen);  /* Catch size_t overflow */
     if (oldtype==type) {
-        // 类型不变，直接 realloc
+        /* 类型不变，直接 realloc */
         newsh = s_realloc_usable(sh, hdrlen+newlen+1, &usable);
         if (newsh == NULL) return NULL;
+        /* 内存申请完后，sds的指针地址肯定要重新算 */
         s = (char*)newsh+hdrlen;
     } else {
         /* Since the header size changes, need to move the string forward,
          * and can't use realloc */
         newsh = s_malloc_usable(hdrlen+newlen+1, &usable);
         if (newsh == NULL) return NULL;
+        /* 从旧地址拷贝字符串 */
         memcpy((char*)newsh+hdrlen, s, len+1);
+        /* 释放旧地址的内存空间 */
         s_free(sh);
+        /* 设置相关参数 */
         s = (char*)newsh+hdrlen;
         s[-1] = type;
         sdssetlen(s, len);
@@ -517,6 +367,7 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
     usable = usable-hdrlen-1;
     if (usable > sdsTypeMaxSize(type))
         usable = sdsTypeMaxSize(type);
+    /* 设置SDS容量 */    
     sdssetalloc(s, usable);
     return s;
 }
@@ -557,9 +408,9 @@ sds sdsResize(sds s, size_t size, int would_regrow) {
      * to do the copy only if really needed. Otherwise if the change is
      * huge, we manually reallocate the string to use the different header
      * type. */
-    // 如果sds类型不变或者是长度缩小导致type变小则使用realloc
+    /* 如果sds类型不变或者是长度缩小导致type变小则使用realloc */
     int use_realloc = (oldtype==type || (type < oldtype && type > SDS_TYPE_8));
-    // 新的整体容量：struct长度+字符串长度+结束符'\0'
+    /* 新的整体容量：struct长度+字符串长度+结束符'\0' */
     size_t newlen = use_realloc ? oldhdrlen+size+1 : hdrlen+size+1;
     int alloc_already_optimal = 0;
     // https://github.com/redis/redis/pull/11766
@@ -583,25 +434,25 @@ sds sdsResize(sds s, size_t size, int would_regrow) {
     } else if (!alloc_already_optimal) {
         /* https://stackoverflow.com/questions/1401234/differences-between-using-realloc-vs-free-malloc-functions 
          * 字符串放大时，malloc+free的性能好点 */
-        // 根据newLen申请内存，返回新的地址指针
+        /* 根据newLen申请内存，返回新的地址指针 */
         newsh = s_malloc(newlen);
         if (newsh == NULL) return NULL;
         /* (char*)newsh+hdrlen代表新的buf地址 
          * s指针代表旧buf的地址，复制到新的地址 */
         memcpy((char*)newsh+hdrlen, s, len);
-        // 释放旧的内存
+        /* 释放旧的内存 */
         s_free(sh);
-        // 获取buf指针地址
+        /* 获取buf指针地址 */
         s = (char*)newsh+hdrlen;
-        // 设置类型
+        /* 设置类型 */
         s[-1] = type;
     }
-    // 长度设置0
+    /* 长度设置0 */
     s[len] = 0;
-    // 设置字符串有效长度及字符串整体长度
+    /* 设置字符串有效长度及字符串整体长度 */
     sdssetlen(s, len);
     sdssetalloc(s, size);
-    // 返回buf地址指针
+    /* 返回buf地址指针 */
     return s;
 }
 ```

@@ -2,7 +2,7 @@
 
 A generic doubly linked list implementation(一个通用的双端链表实现)
 
-## 头文件
+## 数据结构
 
 ### listNode
 
@@ -52,7 +52,7 @@ typedef struct list {
 } list;
 ```
 
-## 方法
+## 函数
 
 ### listCreate
 
