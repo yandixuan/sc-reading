@@ -237,7 +237,16 @@ function sidebarRedis(): DefaultTheme.SidebarItem[] {
         { text: 'sds', link: '/redis/data-structure/sds' },
         { text: 'listpack', link: '/redis/data-structure/listpack' },
         { text: 'skiplist', link: '/redis/data-structure/skiplist' },
+        { text: 'quicklist', link: '/redis/data-structure/quicklist' },
         { text: 'adlist', link: '/redis/data-structure/adlist' },
+      ],
+    },
+    {
+      text: '命令类型',
+      collapsed: true,
+      items: [
+        { text: 'list', link: '/redis/command-type/list' },
+        { text: 'zset', link: '/redis/command-type/zset' },
       ],
     },
     {

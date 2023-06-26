@@ -1,6 +1,7 @@
 {
   "name": "sc-reading",
   "private": "true",
+  "packageManager": "pnpm@8.6.5",
   "author": "ydx",
   "scripts": {
     "docs:dev": "vitepress dev docs",
@@ -17,7 +18,7 @@
     "eslint-define-config": "^1.21.0",
     "taze": "^0.10.2",
     "typescript": "^5.1.3",
-    "unocss": "^0.53.1",
+    "unocss": "^0.53.4",
     "unplugin-vue-components": "^0.25.1",
     "vite": "^4.3.9",
     "vitepress": "1.0.0-beta.3",

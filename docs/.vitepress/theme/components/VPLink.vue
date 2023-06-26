@@ -3,12 +3,11 @@ defineProps<{
   icon?: string
   url: string
   title?: string
-
 }>()
 </script>
 
 <template>
-  <a :href="url" class="select-none decoration-none! cursor-pointer outline-0">
+  <a :href="url" class="select-none decoration-none! cursor-pointer outline-0 vertical-middle">
     <div
       class="flex items-center py-3px
       hover:(bg-[rgba(53,53,47,0.08)] dark:bg-[rgba(255,255,255,0.055)])"
