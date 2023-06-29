@@ -199,7 +199,7 @@ void listTypePush(robj *subject, robj *value, int where) {
   - 1: push if key exists
   - 0: otherwise
 
-以`LIST_CONV_GROWING`模式调用 <VPLink class="inline-block" icon="i-carbon-code" url="#pushGenericCommand" title="listTypeTryConversionRaw"/>
+以`LIST_CONV_GROWING`模式调用 <VPLink inline-block icon="i-carbon-code" url="#pushGenericCommand" title="listTypeTryConversionRaw"/>
 
 ```c
 void pushGenericCommand(client *c, int where, int xx) {
