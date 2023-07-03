@@ -503,3 +503,53 @@ void quicklistAppendListpack(quicklist *quicklist, unsigned char *zl) {
     quicklist->count += node->count;
 }
 ```
+
+### __quicklistDelNode
+
+快速列表删除节点元素
+
+```c
+REDIS_STATIC void __quicklistDelNode(quicklist *quicklist,
+                                     quicklistNode *node) {
+    /* Update the bookmark if any */
+    /* 检查是否存在书签（bookmark）指向当前要删除的节点（node） */
+    quicklistBookmark *bm = _quicklistBookmarkFindByNode(quicklist, node);
+    if (bm) {
+        /* 该节点要被删除，故指向删除节点的下一个节点 */
+        bm->node = node->next;
+        /* if the bookmark was to the last node, delete it. */
+        /* 如果书签指向的是最后一个节点（last node），则删除该书签 */
+        if (!bm->node)
+            _quicklistBookmarkDelete(quicklist, bm);
+    }
+    /* 将当前节点的下一个节点的前驱指针指向当前节点的前驱节点 */
+    if (node->next)
+        node->next->prev = node->prev;
+    /* 将当前节点的前驱节点的后继指针指向当前节点的后继节点 */
+    if (node->prev)
+        node->prev->next = node->next;
+    /* 如果当前节点是尾节点，则更新尾节点为当前节点的前驱节点 */
+    if (node == quicklist->tail) {
+        quicklist->tail = node->prev;
+    }
+    /* 如果当前节点是头节点，则更新头节点为当前节点的后继节点 */
+    if (node == quicklist->head) {
+        quicklist->head = node->next;
+    }
+
+    /* Update len first, so in __quicklistCompress we know exactly len */
+    /* 先更新快速列表的长度len，以确保在__quicklistCompress函数中能准确获取到len */
+    quicklist->len--;
+    /* 更新快速列表的元素总数count，减去当前删除的节点中的元素数量 */
+    quicklist->count -= node->count;
+
+    /* If we deleted a node within our compress depth, we
+     * now have compressed nodes needing to be decompressed. */
+    /* 如果在压缩深度范围内删除了一个节点，需要对已压缩的节点进行解压缩操作，保证压缩深度 */ 
+    __quicklistCompress(quicklist, NULL);
+    /* 释放当前节点的条目所占用的内存 */
+    zfree(node->entry);
+    /* 释放当前节点所占用的内存 */
+    zfree(node);
+}
+```

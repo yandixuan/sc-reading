@@ -30,6 +30,22 @@ void rpushxCommand(client *c) {
 }
 ```
 
+### POP
+
+<VPLink icon="i-carbon-code" title="实现" url="#popGenericCommand"/>
+
+```c
+/* LPOP <key> [count] */
+void lpopCommand(client *c) {
+    popGenericCommand(c,LIST_HEAD);
+}
+
+/* RPOP <key> [count] */
+void rpopCommand(client *c) {
+    popGenericCommand(c,LIST_TAIL);
+}
+```
+
 ## 函数
 
 ### listTypeTryConvertListpack
@@ -190,7 +206,7 @@ void listTypePush(robj *subject, robj *value, int where) {
 
 ### pushGenericCommand
 
-`LPUSH/RPUSH/LPUSHX/RPUSHX`命令的主要实现
+`LPUSH/RPUSH/LPUSHX/RPUSHX`命令的实现
 
 - `where`: 插入位置
   - `LIST_HEAD`: 从头部推入，即`LPUSH`
@@ -238,5 +254,58 @@ void pushGenericCommand(client *c, int where, int xx) {
     signalModifiedKey(c,c->db,c->argv[1]);
     /* 发送通知，通知事件为列表操作以及对应的键和数据库 ID */
     notifyKeyspaceEvent(NOTIFY_LIST,event,c->argv[1],c->db->id);
+}
+```
+
+### popGenericCommand
+
+`LPOP/RPOP`命令的实现
+
+```c
+void popGenericCommand(client *c, int where) {
+    int hascount = (c->argc == 3);
+    long count = 0;
+    robj *value;
+
+    if (c->argc > 3) {
+        addReplyErrorArity(c);
+        return;
+    } else if (hascount) {
+        /* Parse the optional count argument. */
+        if (getPositiveLongFromObjectOrReply(c,c->argv[2],&count,NULL) != C_OK) 
+            return;
+    }
+
+    robj *o = lookupKeyWriteOrReply(c, c->argv[1], hascount ? shared.nullarray[c->resp]: shared.null[c->resp]);
+    if (o == NULL || checkType(c, o, OBJ_LIST))
+        return;
+
+    if (hascount && !count) {
+        /* Fast exit path. */
+        addReply(c,shared.emptyarray);
+        return;
+    }
+
+    if (!count) {
+        /* Pop a single element. This is POP's original behavior that replies
+         * with a bulk string. */
+        value = listTypePop(o,where);
+        serverAssert(value != NULL);
+        addReplyBulk(c,value);
+        decrRefCount(value);
+        listElementsRemoved(c,c->argv[1],where,o,1,1,NULL);
+    } else {
+        /* Pop a range of elements. An addition to the original POP command,
+         *  which replies with a multi-bulk. */
+        long llen = listTypeLength(o);
+        long rangelen = (count > llen) ? llen : count;
+        long rangestart = (where == LIST_HEAD) ? 0 : -rangelen;
+        long rangeend = (where == LIST_HEAD) ? rangelen - 1 : -1;
+        int reverse = (where == LIST_HEAD) ? 0 : 1;
+
+        addListRangeReply(c,o,rangestart,rangeend,reverse);
+        listTypeDelRange(o,rangestart,rangelen);
+        listElementsRemoved(c,c->argv[1],where,o,rangelen,1,NULL);
+    }
 }
 ```
