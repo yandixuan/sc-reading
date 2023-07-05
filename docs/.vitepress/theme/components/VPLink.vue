@@ -12,7 +12,7 @@ defineProps<{
       class="flex items-center py-3px
       hover:(bg-[rgba(53,53,47,0.08)] dark:bg-[rgba(255,255,255,0.055)])"
     >
-      <div class="relative h-24px w-24px m-r-4px" :class="[icon]" />
+      <div v-if="icon" class="relative h-24px w-24px m-r-4px" :class="[icon]" />
       <div
         class="leading-[1.3] text-truncate font-500
         border-b-1 border-b-solid
