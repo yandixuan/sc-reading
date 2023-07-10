@@ -1,6 +1,5 @@
-import type { DefaultTheme } from 'vitepress'
 import { defineConfig } from 'vitepress'
-import { sidebarJdk, sidebarNetty, sidebarRedis, sidebarSpring } from './configs'
+import { sidebarFeign, sidebarJdk, sidebarNetty, sidebarRedis, sidebarSpring } from './configs'
 
 export default defineConfig({
   title: '源码阅读',
@@ -55,37 +54,7 @@ function nav() {
     {
       text: 'Feign',
       activeMatch: '^/feign/',
-      link: '/feign/ReflectiveFeign/',
-    },
-  ]
-}
-
-function sidebarFeign(): DefaultTheme.SidebarItem[] {
-  return [
-    {
-      text: 'Contract',
-      collapsed: true,
-      link: '/feign/Contract/',
-      items: [
-        { text: 'BaseContract', link: '/feign/Contract/BaseContract' },
-        { text: 'DeclarativeContract', link: '/feign/Contract/DeclarativeContract' },
-        { text: 'Default', link: '/feign/Contract/Default' },
-      ],
-    },
-    {
-      text: 'Client',
-      collapsed: true,
-      link: '/feign/Client/',
-      items: [
-        { text: 'Default', link: '/feign/Client/Default' },
-      ],
-    },
-    {
-      text: '',
-      collapsed: false,
-      items: [
-        { text: 'MethodMetadata', link: '/feign/MethodMetadata' },
-      ],
+      link: '/feign/',
     },
   ]
 }
