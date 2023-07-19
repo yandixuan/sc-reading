@@ -3,25 +3,6 @@ import type { DefaultTheme } from 'vitepress'
 export function sidebarSpring(): DefaultTheme.SidebarItem[] {
   return [
     {
-      text: 'boot',
-      collapsed: true,
-      items: [
-        { text: 'ApplicationContextFactory', link: '/spring/boot/ApplicationContextFactory' },
-        { text: 'AutoConfigurationImportSelector', link: '/spring/boot/AutoConfigurationImportSelector' },
-        { text: 'BeanDefinitionLoader', link: '/spring/boot/BeanDefinitionLoader' },
-        { text: 'ConfigDataEnvironment', link: '/spring/boot/ConfigDataEnvironment' },
-        { text: 'ConfigDataEnvironmentPostProcessor', link: '/spring/boot/ConfigDataEnvironmentPostProcessor' },
-        { text: 'ConfigDataLocationResolvers', link: '/spring/boot/ConfigDataLocationResolvers' },
-        { text: 'EnvironmentPostProcessorApplicationListener', link: '/spring/boot/EnvironmentPostProcessorApplicationListener' },
-        { text: 'EventPublishingRunListener', link: '/spring/boot/EventPublishingRunListener' },
-        { text: 'LazyInitializationBeanFactoryPostProcessor', link: '/spring/boot/LazyInitializationBeanFactoryPostProcessor' },
-        { text: 'ServletWebServerApplicationContext', link: '/spring/boot/ServletWebServerApplicationContext' },
-        { text: 'SharedMetadataReaderFactoryContextInitializer', link: '/spring/boot/SharedMetadataReaderFactoryContextInitializer' },
-        { text: 'SpringApplication', link: '/spring/boot/SpringApplication' },
-        { text: 'SpringFactoriesLoader', link: '/spring/boot/SpringFactoriesLoader' },
-      ],
-    },
-    {
       text: 'context',
       collapsed: true,
       items: [
@@ -101,5 +82,17 @@ export function sidebarSpring(): DefaultTheme.SidebarItem[] {
       ],
     },
 
+  ]
+}
+
+export function springBoot(): DefaultTheme.SidebarItem[] {
+  return [
+    {
+      text: 'SpringBoot',
+      items: [
+        { text: '启动流程', link: '/spring-boot/启动流程' },
+        { text: '自动配置', link: '/spring-boot/自动配置' },
+      ],
+    },
   ]
 }

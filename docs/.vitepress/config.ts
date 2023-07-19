@@ -1,8 +1,10 @@
+import type { DefaultTheme } from 'vitepress'
+
 import { defineConfig } from 'vitepress'
-import { sidebarFeign, sidebarJdk, sidebarNetty, sidebarRedis, sidebarSpring } from './configs'
+import { sidebarFeign, sidebarJdk, sidebarNetty, sidebarRedis, sidebarSpring, springBoot } from './configs'
 
 export default defineConfig({
-  title: '源码阅读',
+  title: 'My Blog',
   description: 'Just playing around.',
   lastUpdated: true,
   cleanUrls: true,
@@ -12,6 +14,7 @@ export default defineConfig({
     sidebar: {
       '/java/': sidebarJdk(),
       '/spring/': sidebarSpring(),
+      '/spring-boot/': springBoot(),
       '/netty': sidebarNetty(),
       '/redis': sidebarRedis(),
       '/feign': sidebarFeign(),
@@ -29,32 +32,43 @@ export default defineConfig({
   },
 })
 
-function nav() {
+function nav(): DefaultTheme.NavItem[] {
   return [
     {
-      text: 'Jdk',
-      activeMatch: '^/jdk/',
-      link: '/java/util/ArrayDeque',
-    },
-    {
-      text: 'Spring',
-      activeMatch: '^/spring/',
-      link: '/spring/boot/SpringApplication',
-    },
-    {
-      text: 'Netty',
-      activeMatch: '^/netty/',
-      link: '/netty/common/EventExecutorGroup',
-    },
-    {
-      text: 'Redis',
-      activeMatch: '^/redis/',
-      link: '/redis/server/',
-    },
-    {
-      text: 'Feign',
-      activeMatch: '^/feign/',
-      link: '/feign/',
+      text: '后端',
+      items: [
+        {
+          text: 'Jdk',
+          activeMatch: '^/jdk/',
+          link: '/java/util/ArrayDeque',
+        },
+        // out-date
+        {
+          text: 'Spring',
+          activeMatch: '^/spring/',
+          link: '/spring/boot/SpringApplication',
+        },
+        {
+          text: 'SpringBoot',
+          activeMatch: '^/spring-boot/',
+          link: '/spring-boot/启动流程',
+        },
+        {
+          text: 'Netty',
+          activeMatch: '^/netty/',
+          link: '/netty/common/EventExecutorGroup',
+        },
+        {
+          text: 'Redis',
+          activeMatch: '^/redis/',
+          link: '/redis/server/',
+        },
+        {
+          text: 'Feign',
+          activeMatch: '^/feign/',
+          link: '/feign/',
+        },
+      ],
     },
   ]
 }
