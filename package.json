@@ -1,7 +1,7 @@
 {
   "name": "sc-reading",
   "private": "true",
-  "packageManager": "pnpm@8.6.9",
+  "packageManager": "pnpm@8.6.10",
   "author": "ydx",
   "scripts": {
     "docs:dev": "vitepress dev docs",
@@ -13,16 +13,16 @@
   "devDependencies": {
     "@antfu/eslint-config": "^0.39.8",
     "@iconify-json/carbon": "^1.1.18",
-    "@types/node": "^18.16.19",
+    "@types/node": "^18.17.0",
     "eslint": "^8.45.0",
     "eslint-define-config": "^1.21.0",
     "lightningcss": "^1.21.5",
     "taze": "^0.11.2",
     "typescript": "^5.1.6",
-    "unocss": "^0.53.5",
+    "unocss": "^0.53.6",
     "unplugin-vue-components": "^0.25.1",
-    "vite": "^4.4.5",
-    "vitepress": "1.0.0-beta.5",
+    "vite": "^4.4.7",
+    "vitepress": "1.0.0-beta.6",
     "vue": "^3.3.4"
   }
 }

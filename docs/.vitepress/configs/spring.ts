@@ -92,6 +92,7 @@ export function springBoot(): DefaultTheme.SidebarItem[] {
       items: [
         { text: '启动流程', link: '/spring-boot/启动流程' },
         { text: '自动配置', link: '/spring-boot/自动配置' },
+        { text: '配置加载', link: '/spring-boot/配置加载' },
       ],
     },
   ]
