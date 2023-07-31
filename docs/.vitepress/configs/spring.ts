@@ -3,6 +3,13 @@ import type { DefaultTheme } from 'vitepress'
 export function sidebarSpring(): DefaultTheme.SidebarItem[] {
   return [
     {
+      text: '',
+      collapsed: true,
+      items: [
+        { text: 'EnableAsync', link: '/spring/EnableAsync' },
+      ],
+    },
+    {
       text: 'context',
       collapsed: true,
       items: [

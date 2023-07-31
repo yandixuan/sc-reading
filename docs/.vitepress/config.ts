@@ -46,7 +46,7 @@ function nav(): DefaultTheme.NavItem[] {
         {
           text: 'Spring',
           activeMatch: '^/spring/',
-          link: '/spring/boot/SpringApplication',
+          link: '/spring/EnableAsync',
         },
         {
           text: 'SpringBoot',
