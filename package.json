@@ -11,7 +11,7 @@
     "taze": "taze minor -wIr"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.39.8",
+    "@antfu/eslint-config": "^0.40.0",
     "@iconify-json/carbon": "^1.1.18",
     "@types/node": "^18.17.1",
     "eslint": "^8.46.0",
@@ -21,7 +21,7 @@
     "typescript": "^5.1.6",
     "unocss": "^0.54.1",
     "unplugin-vue-components": "^0.25.1",
-    "vite": "^4.4.7",
+    "vite": "^4.4.8",
     "vitepress": "1.0.0-beta.7",
     "vue": "^3.3.4"
   }

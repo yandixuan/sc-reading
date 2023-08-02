@@ -7,6 +7,7 @@ export function sidebarSpring(): DefaultTheme.SidebarItem[] {
       collapsed: true,
       items: [
         { text: 'EnableAsync', link: '/spring/EnableAsync' },
+        { text: 'EnableScheduling', link: '/spring/EnableScheduling' },
       ],
     },
     {
