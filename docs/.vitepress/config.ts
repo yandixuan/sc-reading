@@ -42,12 +42,6 @@ function nav(): DefaultTheme.NavItem[] {
           activeMatch: '^/jdk/',
           link: '/java/util/ArrayDeque',
         },
-        // out-date
-        {
-          text: 'Spring',
-          activeMatch: '^/spring/',
-          link: '/spring/EnableAsync',
-        },
         {
           text: 'SpringBoot',
           activeMatch: '^/spring-boot/',
@@ -67,6 +61,11 @@ function nav(): DefaultTheme.NavItem[] {
           text: 'Feign',
           activeMatch: '^/feign/',
           link: '/feign/',
+        },
+        {
+          text: 'Vite',
+          activeMatch: '^/vite/',
+          link: '/vite/start',
         },
       ],
     },
