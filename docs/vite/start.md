@@ -132,7 +132,7 @@ async (root: string, options: ServerOptions & GlobalCLIOptions) => {
 
 ## createServer
 
-通过 **_createServer** 创建服务
+通过 **_createServer** 创建`ViteDevServer`服务对象，通过`ViteDevServer#listen`方法实现对端口的监听
 
 ```ts
 export async function _createServer(
@@ -164,7 +164,10 @@ export async function _createServer(
    * 创建Connect中间件服务
    */
   const middlewares = connect() as Connect.Server
-  // middlewareMode可以接管httpServer
+  /**
+   * middlewareMode: 完全控制服务器
+   * https://cn.vitejs.dev/config/server-options.html#server-middlewaremode
+   */
   const httpServer = middlewareMode
     ? null
     : await resolveHttpServer(serverConfig, middlewares, httpsOptions)
@@ -336,7 +339,11 @@ export async function _createServer(
     _fsDenyGlob: picomatch(config.server.fs.deny, { matchBase: true }),
     _shortcutsOptions: undefined,
   }
-
+  
+  /**
+   * 这个方法用于在开发环境下转换 index.html 文件，默认注入一段客户端代码 /@vite/client ，
+   * 用于在客户端创建 WebSocket，接收服务端热更新传递的消息
+   */
   server.transformIndexHtml = createDevHtmlTransformFn(server)
 
   if (!middlewareMode) {
@@ -381,7 +388,7 @@ export async function _createServer(
 
     await onHMRUpdate(file, false)
   })
-
+  // 文件新增和删除操作
   watcher.on('add', onFileAddUnlink)
   watcher.on('unlink', onFileAddUnlink)
 
@@ -438,12 +445,13 @@ export async function _createServer(
   // base
   if (config.base !== '/')
     middlewares.use(baseMiddleware(server))
-
+  // 支持dev开发期间，通过'/__open-in-editor'请求，调用编辑器打开相应代码文件
   // open in editor support
   middlewares.use('/__open-in-editor', launchEditorMiddleware())
 
   // ping request handler
   // Keep the named function. The name is visible in debug logs via `DEBUG=connect:dispatcher ...`
+  // 对于服务器对于ping的请求的处理，即204 NO CONTENT
   middlewares.use((req, res, next) => {
     if (req.headers.accept === 'text/x-vite-ping')
       res.writeHead(204).end()
@@ -456,6 +464,11 @@ export async function _createServer(
   // serve static files under /public
   // this applies before the transform middleware so that these files are served
   // as-is without transforms.
+  /**
+   * vite中的静态资源通过`sirv`这个包进行映射
+   * 对于vite.confg.ts中的publicDir的静态资源目录进行映射
+   * 必须在`transformMiddleware`之前，否则就会被`transformMiddleware`处理
+   */
   if (config.publicDir) {
     middlewares.use(
       servePublicMiddleware(config.publicDir, config.server.headers),
@@ -463,27 +476,34 @@ export async function _createServer(
   }
 
   // main transform middleware
+  // 响应请求之前，对请求的文件进行预处理
   middlewares.use(transformMiddleware(server))
 
   // serve static files
+  // 处理链接root之外的相关静态文件相关，例如多项目情况
   middlewares.use(serveRawFsMiddleware(server))
+  // 处理serve root路径下静态文件相关
   middlewares.use(serveStaticMiddleware(root, server))
 
   // html fallback
+  // 单页面history模式下404的处理，即交由前端路由负责页面跳转
   if (config.appType === 'spa' || config.appType === 'mpa')
     middlewares.use(htmlFallbackMiddleware(root, config.appType === 'spa'))
 
   // run post config hooks
   // This is applied before the html middleware so that user middleware can
   // serve custom content instead of index.html.
+  // 执行前面存储插件中的configureServer钩子，依次进行回调
   postHooks.forEach(fn => fn && fn())
 
   if (config.appType === 'spa' || config.appType === 'mpa') {
     // transform index.html
+    // 用server.transformIndexHtml对html加工
     middlewares.use(indexHtmlMiddleware(server))
 
     // handle 404s
     // Keep the named function. The name is visible in debug logs via `DEBUG=connect:dispatcher ...`
+    // 404处理
     middlewares.use((_, res) => {
       res.statusCode = 404
       res.end()
@@ -491,6 +511,7 @@ export async function _createServer(
   }
 
   // error handler
+  // 异常处理，直接发送`ErrorOverlay`相关html字符串
   middlewares.use(errorMiddleware(server, middlewareMode))
 
   // httpServer.listen can be called multiple times
@@ -498,6 +519,7 @@ export async function _createServer(
   // this code is to avoid calling buildStart multiple times
   let initingServer: Promise<void> | undefined
   let serverInited = false
+  // 服务器初始化方法
   const initServer = async () => {
     if (serverInited)
       return
@@ -518,27 +540,35 @@ export async function _createServer(
 
   if (!middlewareMode && httpServer) {
     // overwrite listen to init optimizer before server start
+    /**
+     * 覆盖node原生httpServer监听端口的动作
+     * 保存原有的行为，在基础上进行增强
+     */
     const listen = httpServer.listen.bind(httpServer)
     httpServer.listen = (async (port: number, ...args: any[]) => {
       try {
         // ensure ws server started
+        // 保证websocket已经启动
         ws.listen()
+        // 初始化服务器（依赖预构建）
         await initServer()
       }
       catch (e) {
         httpServer.emit('error', e)
         return
       }
+      // 监听http端口
       return listen(port, ...args)
     }) as any
   }
   else {
+    // 使用用户自己创建的server，即不使用vite的默认server
     if (options.ws)
       ws.listen()
-
+    // 初始化服务器（依赖预构建）
     await initServer()
   }
-
+  // 返回对象
   return server
 }
 ```
