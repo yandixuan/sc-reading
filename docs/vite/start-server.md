@@ -66,9 +66,10 @@ async (root: string, options: ServerOptions & GlobalCLIOptions) => {
     // 拿到info logger对象
     const info = server.config.logger.info
     /**
-       * __vite_start_time跟perfomance有关
-       * 控制台输出启动结果
-       */
+     * __vite_start_time跟perfomance有关
+     * 控制台输出启动结果
+     */
+    // eslint-disable-next-line no-restricted-globals
     const viteStartTime = global.__vite_start_time ?? false
     const startupDurationString = viteStartTime
       ? colors.dim(
@@ -101,6 +102,7 @@ async (root: string, options: ServerOptions & GlobalCLIOptions) => {
               const inspector = await import('node:inspector').then(
                 r => r.default,
               )
+              // eslint-disable-next-line promise/param-names
               await new Promise<void>((res) => {
                 profileSession = new inspector.Session()
                 profileSession.connect()
@@ -339,7 +341,7 @@ export async function _createServer(
     _fsDenyGlob: picomatch(config.server.fs.deny, { matchBase: true }),
     _shortcutsOptions: undefined,
   }
-  
+
   /**
    * 这个方法用于在开发环境下转换 index.html 文件，默认注入一段客户端代码 /@vite/client ，
    * 用于在客户端创建 WebSocket，接收服务端热更新传递的消息

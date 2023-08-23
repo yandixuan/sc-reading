@@ -12,14 +12,11 @@ devDependencies:
     specifier: ^1.1.20
     version: 1.1.20
   '@types/node':
-    specifier: ^18.17.6
-    version: 18.17.6
+    specifier: ^18.17.8
+    version: 18.17.8
   eslint:
     specifier: ^8.47.0
     version: 8.47.0
-  eslint-define-config:
-    specifier: ^1.23.0
-    version: 1.23.0
   lightningcss:
     specifier: ^1.21.7
     version: 1.21.7
@@ -37,10 +34,10 @@ devDependencies:
     version: 0.25.1(vue@3.3.4)
   vite:
     specifier: ^4.4.9
-    version: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+    version: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
   vitepress:
     specifier: 1.0.0-rc.4
-    version: 1.0.0-rc.4(@algolia/client-search@4.17.0)(@types/node@18.17.6)(lightningcss@1.21.7)(search-insights@2.6.0)
+    version: 1.0.0-rc.4(@algolia/client-search@4.17.0)(@types/node@18.17.8)(lightningcss@1.21.7)(search-insights@2.6.0)
   vue:
     specifier: ^3.3.4
     version: 3.3.4
@@ -931,8 +928,8 @@ packages:
       '@types/unist': 2.0.6
     dev: true
 
-  /@types/node@18.17.6:
-    resolution: {integrity: sha512-fGmT/P7z7ecA6bv/ia5DlaWCH4YeZvAQMNpUhrJjtAhOhZfoxS1VLUgU2pdk63efSjQaOJWdXMuAJsws+8I6dg==}
+  /@types/node@18.17.8:
+    resolution: {integrity: sha512-Av/7MqX/iNKwT9Tr60V85NqMnsmh8ilfJoBlIVibkXfitk9Q22D9Y5mSpm+FvG5DET7EbVfB40bOiLzKgYFgPw==}
     dev: true
 
   /@types/normalize-package-data@2.4.1:
@@ -1160,7 +1157,7 @@ packages:
       '@unocss/core': 0.55.2
       '@unocss/reset': 0.55.2
       '@unocss/vite': 0.55.2(vite@4.4.9)
-      vite: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+      vite: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
     transitivePeerDependencies:
       - rollup
     dev: true
@@ -1338,7 +1335,7 @@ packages:
       chokidar: 3.5.3
       fast-glob: 3.3.1
       magic-string: 0.30.2
-      vite: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+      vite: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
     transitivePeerDependencies:
       - rollup
     dev: true
@@ -1350,7 +1347,7 @@ packages:
       vite: ^4.0.0
       vue: ^3.2.25
     dependencies:
-      vite: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+      vite: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
       vue: 3.3.4
     dev: true
 
@@ -2100,11 +2097,6 @@ packages:
   /escape-string-regexp@4.0.0:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
-    dev: true
-
-  /eslint-define-config@1.23.0:
-    resolution: {integrity: sha512-4mMyu0JuBkQHsCtR+42irIQdFLmLIW+pMAVcyOV/gZRL4O1R8iuH0eMG3oL3Cbi1eo9fDAfT5CIHVHgdyxcf6w==}
-    engines: {node: ^16.13.0 || >=18.0.0, npm: '>=7.0.0', pnpm: '>= 8.6.0'}
     dev: true
 
   /eslint-import-resolver-node@0.3.7:
@@ -4539,7 +4531,7 @@ packages:
       '@unocss/transformer-directives': 0.55.2
       '@unocss/transformer-variant-group': 0.55.2
       '@unocss/vite': 0.55.2(vite@4.4.9)
-      vite: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+      vite: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
     transitivePeerDependencies:
       - postcss
       - rollup
@@ -4608,7 +4600,7 @@ packages:
       builtins: 5.0.1
     dev: true
 
-  /vite@4.4.9(@types/node@18.17.6)(lightningcss@1.21.7):
+  /vite@4.4.9(@types/node@18.17.8)(lightningcss@1.21.7):
     resolution: {integrity: sha512-2mbUn2LlUmNASWwSCNSJ/EG2HuSRTnVNaydp6vMCm5VIqJsjMfbIWtbH2kDuwUVW5mMUKKZvGPX/rqeqVvv1XA==}
     engines: {node: ^14.18.0 || >=16.0.0}
     hasBin: true
@@ -4636,7 +4628,7 @@ packages:
       terser:
         optional: true
     dependencies:
-      '@types/node': 18.17.6
+      '@types/node': 18.17.8
       esbuild: 0.18.11
       lightningcss: 1.21.7
       postcss: 8.4.27
@@ -4645,7 +4637,7 @@ packages:
       fsevents: 2.3.2
     dev: true
 
-  /vitepress@1.0.0-rc.4(@algolia/client-search@4.17.0)(@types/node@18.17.6)(lightningcss@1.21.7)(search-insights@2.6.0):
+  /vitepress@1.0.0-rc.4(@algolia/client-search@4.17.0)(@types/node@18.17.8)(lightningcss@1.21.7)(search-insights@2.6.0):
     resolution: {integrity: sha512-JCQ89Bm6ECUTnyzyas3JENo00UDJeK8q1SUQyJYou+4Yz5BKEc/F3O21cu++DnUT2zXc0kvQ2Aj4BZCc/nioXQ==}
     hasBin: true
     dependencies:
@@ -4660,7 +4652,7 @@ packages:
       mark.js: 8.11.1
       minisearch: 6.1.0
       shiki: 0.14.3
-      vite: 4.4.9(@types/node@18.17.6)(lightningcss@1.21.7)
+      vite: 4.4.9(@types/node@18.17.8)(lightningcss@1.21.7)
       vue: 3.3.4
     transitivePeerDependencies:
       - '@algolia/client-search'

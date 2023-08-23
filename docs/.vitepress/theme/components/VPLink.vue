@@ -9,8 +9,8 @@ defineProps<{
 <template>
   <a :href="url" class="select-none decoration-none! cursor-pointer outline-0 vertical-middle">
     <div
-      class="flex items-center py-3px
-      hover:(bg-[rgba(53,53,47,0.08)] dark:bg-[rgba(255,255,255,0.055)])"
+      flex items-center py-3px
+      class="hover:(bg-[rgba(53,53,47,0.08)] dark:bg-[rgba(255,255,255,0.055)])"
     >
       <div v-if="icon" class="relative h-24px w-24px m-r-4px" :class="[icon]" />
       <div

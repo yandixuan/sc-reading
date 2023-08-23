@@ -1,7 +1,11 @@
 import type { DefaultTheme } from 'vitepress'
 
 import { defineConfig } from 'vitepress'
-import { sidebarFeign, sidebarJdk, sidebarNetty, sidebarRedis, sidebarSpring, springBoot } from './configs'
+import {
+  sidebarFeign, sidebarJdk, sidebarNetty,
+  sidebarRedis, sidebarSpring, sidebarVite,
+  springBoot,
+} from './configs'
 
 export default defineConfig({
   title: 'My Blog',
@@ -18,6 +22,7 @@ export default defineConfig({
       '/netty': sidebarNetty(),
       '/redis': sidebarRedis(),
       '/feign': sidebarFeign(),
+      '/vite': sidebarVite(),
     },
     footer: {
       message: 'powered by <a href="https://vitepress.dev/">VitePress</a>',
@@ -65,7 +70,7 @@ function nav(): DefaultTheme.NavItem[] {
         {
           text: 'Vite',
           activeMatch: '^/vite/',
-          link: '/vite/start',
+          link: '/vite/start-server',
         },
       ],
     },
