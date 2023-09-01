@@ -4,11 +4,13 @@ import Theme from 'vitepress/theme'
 import './rainbow.css'
 import './vars.css'
 import 'uno.css'
+import DefaultLayout from './Layout.vue'
 
 let homePageStyle: HTMLStyleElement | undefined
 
 export default {
   ...Theme,
+  Layout: DefaultLayout,
   enhanceApp({ router }: EnhanceAppContext) {
     if (typeof window === 'undefined')
       return
