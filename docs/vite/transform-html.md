@@ -6,7 +6,7 @@
 
 - 注入静态资源，根据项目配置和构建结果自动将生成的CSS、JavaScript等资源链接插入HTML文件中
 - 处理html模板变量，允许你在模板中使用动态数据和条件渲染
-- 注入hmr相关脚本，开发服务器能够及时通知浏览器更新页面，而无需手动刷新。
+- 注入hmr相关脚本，开发服务器能够及时通知浏览器更新页面，而无需手动刷新
 
 ## 读取HTML
 
@@ -102,6 +102,66 @@ export function createDevHtmlTransformFn(
 ```
 
 ### applyHtmlTransforms
+
+> 源码位置：<https://github.com/vitejs/vite/blob/main/packages/vite/src/node/plugins/html.ts#L1048>
+
+```ts
+export async function applyHtmlTransforms(
+  html: string,
+  hooks: IndexHtmlTransformHook[],
+  ctx: IndexHtmlTransformContext,
+): Promise<string> {
+  // hook依次对html字符串进行加工
+  for (const hook of hooks) {
+    // 拿到hook处理到的结果
+    const res = await hook(html, ctx)
+    // res为空则跳过
+    if (!res) {
+      continue
+    }
+    // 返回的结果为string则覆盖html
+    if (typeof res === 'string') {
+      html = res
+    } else {
+      // 返回的类型可能是对象或数组
+      let tags: HtmlTagDescriptor[]
+      if (Array.isArray(res)) {
+        tags = res
+      } else {
+        html = res.html || html
+        tags = res.tags
+      }
+
+      const headTags: HtmlTagDescriptor[] = []
+      const headPrependTags: HtmlTagDescriptor[] = []
+      const bodyTags: HtmlTagDescriptor[] = []
+      const bodyPrependTags: HtmlTagDescriptor[] = []
+      // 根据标签进行分类
+      for (const tag of tags) {
+        if (tag.injectTo === 'body') {
+          bodyTags.push(tag)
+        } else if (tag.injectTo === 'body-prepend') {
+          bodyPrependTags.push(tag)
+        } else if (tag.injectTo === 'head') {
+          headTags.push(tag)
+        } else {
+          headPrependTags.push(tag)
+        }
+      }
+      // 在head标签首行插入
+      html = injectToHead(html, headPrependTags, true)
+      // 在head标签尾行插入
+      html = injectToHead(html, headTags)
+      // 在body标签首行插入
+      html = injectToBody(html, bodyPrependTags, true)
+      // 在body标签尾行插入
+      html = injectToBody(html, bodyTags)
+    }
+  }
+  
+  return html
+}
+```
 
 ### traverseHtml
 

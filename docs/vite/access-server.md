@@ -39,5 +39,3 @@
 `/index.html`，就会被`indexHtmlMiddleware`读取和修改。具体分析如下：
 
 [转换HTML](./transform-html.md)
-
-<!-- indexHtmlMiddleware 用来处理 html 文件请求。其内部会调用所有插件的 transformIndexHtml 钩子。 -->
