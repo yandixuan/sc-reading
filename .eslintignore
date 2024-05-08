@@ -1,4 +1,0 @@
-node_modules
-!.vitepress
-docs/.vitepress/cache/deps/*.*
-**/*.md

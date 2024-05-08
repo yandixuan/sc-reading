@@ -9,7 +9,7 @@ hero:
   actions:
     - theme: brand
       text: Get Started
-      link: /redis/server
+      link: /redis/server/
     - theme: alt
       text: View on GitHub
       link: https://github.com/yandixuan/sc-reading
@@ -27,4 +27,4 @@ features:
   - icon: 🚀
     title: Ship Fast Sites
     details: Fast initial load with static HTML, fast post-load navigation with client-side routing.
----  
+---
