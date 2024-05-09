@@ -2,8 +2,12 @@ import type { DefaultTheme } from 'vitepress'
 
 import { defineConfig } from 'vitepress'
 import {
-  sidebarFeign, sidebarJdk, sidebarNetty,
-  sidebarRedis, sidebarSpring, sidebarVite,
+  sidebarFeign,
+  sidebarJdk,
+  sidebarNetty,
+  sidebarRedis,
+  sidebarSpring,
+  sidebarVite,
   springBoot,
 } from './configs'
 
@@ -71,6 +75,16 @@ function nav(): DefaultTheme.NavItem[] {
           text: 'Vite',
           activeMatch: '^/vite/',
           link: '/vite/start-server',
+        },
+      ],
+    },
+    {
+      text: '前端',
+      items: [
+        {
+          text: 'Vue',
+          activeMatch: '^/vue/',
+          link: '/vue/reactivity',
         },
       ],
     },

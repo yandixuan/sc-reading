@@ -3,9 +3,9 @@ layout: home
 sidebar: false
 
 hero:
-  name: VitePress
-  text: Vite & Vue Powered Static Site Generator
-  tagline: Simple, powerful, and fast. Meet the modern SSG framework you've always wanted.
+  name: Ydx学习记录
+  text: 源码阅读及学习记录
+  tagline: Customizable · Powerful · Fast · Joyful
   actions:
     - theme: brand
       text: Get Started
