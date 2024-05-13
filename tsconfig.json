@@ -2,20 +2,20 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "es2018",
-    "module": "esnext",
-    "lib": ["esnext"],
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "strict": true,
-    "strictNullChecks": true,
-    "resolveJsonModule": true,
-    "skipDefaultLibCheck": true,
-    "skipLibCheck": true,
     "jsx": "preserve",
+    "lib": ["esnext"],
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
     "types": [
       "node",
       "vite/client"
-    ]
+    ],
+    "strict": true,
+    "strictNullChecks": true,
+    "esModuleInterop": true,
+    "skipDefaultLibCheck": true,
+    "skipLibCheck": true
   },
   "exclude": ["**/node_modules/**", "**/dist/**"]
 }
